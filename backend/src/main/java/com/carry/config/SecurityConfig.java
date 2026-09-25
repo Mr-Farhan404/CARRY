@@ -82,14 +82,19 @@ public class SecurityConfig {
     public UrlBasedCorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true);
+        java.util.List<String> patterns = new java.util.ArrayList<>();
+        patterns.add("https://*.vercel.app");
+        patterns.add("http://localhost:*");
+        patterns.add("http://127.0.0.1:*");
+
         if (allowedOrigin != null && !allowedOrigin.isBlank()) {
-            java.util.List<String> origins = java.util.Arrays.stream(allowedOrigin.split(","))
+            java.util.Arrays.stream(allowedOrigin.split(","))
                     .map(String::trim)
                     .map(o -> o.endsWith("/") ? o.substring(0, o.length() - 1) : o)
                     .filter(o -> !o.isEmpty())
-                    .toList();
-            config.setAllowedOrigins(origins);
+                    .forEach(patterns::add);
         }
+        config.setAllowedOriginPatterns(patterns);
         config.setAllowedHeaders(List.of("*"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
 
