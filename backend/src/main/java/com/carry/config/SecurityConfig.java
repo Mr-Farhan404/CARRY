@@ -83,11 +83,12 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true);
         if (allowedOrigin != null && !allowedOrigin.isBlank()) {
-            String origin = allowedOrigin.trim();
-            if (origin.endsWith("/")) {
-                origin = origin.substring(0, origin.length() - 1);
-            }
-            config.setAllowedOrigins(List.of(origin));
+            java.util.List<String> origins = java.util.Arrays.stream(allowedOrigin.split(","))
+                    .map(String::trim)
+                    .map(o -> o.endsWith("/") ? o.substring(0, o.length() - 1) : o)
+                    .filter(o -> !o.isEmpty())
+                    .toList();
+            config.setAllowedOrigins(origins);
         }
         config.setAllowedHeaders(List.of("*"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
