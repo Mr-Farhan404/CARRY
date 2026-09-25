@@ -15,12 +15,10 @@ services:
     envVars:
       - key: SPRING_PROFILES_ACTIVE
         value: prod
-      - key: PORT
-        value: 8080
       - key: DB_URL
         sync: false
       - key: DB_USERNAME
-        value: root
+        sync: false
       - key: DB_PASSWORD
         sync: false
       - key: JWT_SECRET
