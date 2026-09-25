@@ -1,0 +1,42 @@
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE Files
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# Node / Frontend
+node_modules/
+dist/
+dist-ssr/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+*.local
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Java / Maven
+target/
+*.class
+*.log
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+replay_pid*
+.mvn/timing.properties
