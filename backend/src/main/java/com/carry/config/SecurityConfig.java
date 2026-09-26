@@ -85,6 +85,7 @@ public class SecurityConfig {
         config.setAllowCredentials(true);
         java.util.List<String> patterns = new java.util.ArrayList<>();
         patterns.add("https://*.vercel.app");
+        patterns.add("https://*.onrender.com");
         patterns.add("http://localhost:*");
         patterns.add("http://127.0.0.1:*");
 

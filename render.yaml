@@ -25,3 +25,18 @@ services:
         generateValue: true
       - key: FRONTEND_URL
         sync: false
+
+  - type: static
+    name: carry-frontend
+    plan: free
+    region: oregon
+    rootDir: frontend
+    buildCommand: npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://carry-backend-hctl.onrender.com
