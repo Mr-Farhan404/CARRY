@@ -2,8 +2,11 @@ package com.carry.controller;
 
 import com.carry.dto.AcceptRequestDto;
 import com.carry.dto.CreateProductRequest;
+import com.carry.dto.NeedMorePaymentDto;
+import com.carry.dto.PaymentResponseDto;
 import com.carry.dto.ProductRequestResponseDto;
 import com.carry.dto.StatusUpdateResponseDto;
+import com.carry.dto.SubmitAdditionalPaymentDto;
 import com.carry.dto.UpdateProductRequest;
 import com.carry.dto.UpdateRequestStatusDto;
 import com.carry.security.UserDetailsImpl;
@@ -100,5 +103,28 @@ public class ProductRequestController {
             @PathVariable Long id,
             @AuthenticationPrincipal UserDetailsImpl currentUser) {
         return ResponseEntity.ok(productRequestService.getRequestTimeline(id, currentUser));
+    }
+
+    @PostMapping("/{id}/need-more")
+    public ResponseEntity<PaymentResponseDto> requestNeedMore(
+            @PathVariable Long id,
+            @Valid @RequestBody NeedMorePaymentDto dto,
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        return ResponseEntity.ok(productRequestService.requestAdditionalPayment(id, dto, currentUser));
+    }
+
+    @PostMapping("/{id}/additional-payment")
+    public ResponseEntity<PaymentResponseDto> submitAdditionalPayment(
+            @PathVariable Long id,
+            @Valid @RequestBody SubmitAdditionalPaymentDto dto,
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        return ResponseEntity.ok(productRequestService.submitAdditionalPayment(id, dto, currentUser));
+    }
+
+    @GetMapping("/{id}/payment")
+    public ResponseEntity<PaymentResponseDto> getPayment(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        return ResponseEntity.ok(productRequestService.getPaymentByRequestId(id, currentUser));
     }
 }

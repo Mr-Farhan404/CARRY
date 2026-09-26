@@ -9,13 +9,14 @@ import StatusBadge from '../components/common/StatusBadge';
 export default function AdminPage() {
   const { token, user } = useAuth();
 
-  // Active Tab: 'complaints' | 'requests' | 'users'
+  // Active Tab: 'complaints' | 'requests' | 'users' | 'payments'
   const [activeTab, setActiveTab] = useState('complaints');
 
   // Data states
   const [complaints, setComplaints] = useState([]);
   const [requests, setRequests] = useState([]);
   const [users, setUsers] = useState([]);
+  const [payments, setPayments] = useState([]);
 
   // Loading & error states
   const [isLoading, setIsLoading] = useState(true);
@@ -39,6 +40,16 @@ export default function AdminPage() {
   const [userSearch, setUserSearch] = useState('');
   const [userRoleFilter, setUserRoleFilter] = useState('ALL');
 
+  // Payments filter & verification modal state
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('ALL');
+  const [paymentAdjustmentFilter, setPaymentAdjustmentFilter] = useState('ALL');
+  const [paymentSearch, setPaymentSearch] = useState('');
+  const [selectedPayment, setSelectedPayment] = useState(null);
+  const [paymentAdminNotes, setPaymentAdminNotes] = useState('');
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  const [paymentActionError, setPaymentActionError] = useState(null);
+  const [paymentActionSuccess, setPaymentActionSuccess] = useState(null);
+
   // Load all admin data
   const loadAdminData = async (silent = false) => {
     if (!silent) setIsLoading(true);
@@ -46,15 +57,17 @@ export default function AdminPage() {
     setError(null);
 
     try {
-      const [complaintsData, requestsData, usersData] = await Promise.all([
+      const [complaintsData, requestsData, usersData, paymentsData] = await Promise.all([
         adminApi.getComplaints(token),
         adminApi.getRequests('ALL', token),
         adminApi.getUsers(token),
+        adminApi.getPayments(token),
       ]);
 
       setComplaints(complaintsData || []);
       setRequests(requestsData || []);
       setUsers(usersData || []);
+      setPayments(paymentsData || []);
     } catch (err) {
       console.error('Failed to load admin data:', err);
       setError(err.message || 'Failed to fetch administrative data');
@@ -102,7 +115,6 @@ export default function AdminPage() {
         token
       );
 
-      // Update in local state
       setComplaints((prev) =>
         prev.map((c) => (c.id === updated.id ? updated : c))
       );
@@ -115,6 +127,76 @@ export default function AdminPage() {
       setComplaintActionError(err.message || 'Failed to update complaint');
     } finally {
       setIsUpdatingComplaint(false);
+    }
+  };
+
+  // Open payment modal
+  const handleOpenPayment = (payment) => {
+    setSelectedPayment(payment);
+    setPaymentAdminNotes(payment.adminNotes || '');
+    setPaymentActionError(null);
+    setPaymentActionSuccess(null);
+  };
+
+  // Close payment modal
+  const handleClosePaymentModal = () => {
+    setSelectedPayment(null);
+    setPaymentAdminNotes('');
+    setPaymentActionError(null);
+    setPaymentActionSuccess(null);
+  };
+
+  // Verify initial payment
+  const handleVerifyInitialPayment = async (statusToSet = 'VERIFIED') => {
+    if (!selectedPayment) return;
+    setIsVerifyingPayment(true);
+    setPaymentActionError(null);
+    setPaymentActionSuccess(null);
+
+    try {
+      const updated = await adminApi.verifyPayment(
+        selectedPayment.id,
+        {
+          status: statusToSet,
+          adminNotes: paymentAdminNotes.trim() || null,
+        },
+        token
+      );
+
+      setPayments((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      setSelectedPayment(updated);
+      setPaymentActionSuccess(`Initial payment marked as ${statusToSet}!`);
+    } catch (err) {
+      setPaymentActionError(err.message || 'Failed to update payment status');
+    } finally {
+      setIsVerifyingPayment(false);
+    }
+  };
+
+  // Verify additional payment
+  const handleVerifyAdditionalPayment = async (statusToSet = 'VERIFIED') => {
+    if (!selectedPayment) return;
+    setIsVerifyingPayment(true);
+    setPaymentActionError(null);
+    setPaymentActionSuccess(null);
+
+    try {
+      const updated = await adminApi.verifyPayment(
+        selectedPayment.id,
+        {
+          additionalPaymentStatus: statusToSet,
+          adminNotes: paymentAdminNotes.trim() || null,
+        },
+        token
+      );
+
+      setPayments((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      setSelectedPayment(updated);
+      setPaymentActionSuccess(`Price adjustment payment marked as ${statusToSet}!`);
+    } catch (err) {
+      setPaymentActionError(err.message || 'Failed to update additional payment status');
+    } finally {
+      setIsVerifyingPayment(false);
     }
   };
 
@@ -162,100 +244,134 @@ export default function AdminPage() {
     });
   }, [users, userRoleFilter, userSearch]);
 
-  // Overview Stats
+  // Filtered Payments
+  const filteredPayments = useMemo(() => {
+    return payments.filter((p) => {
+      const matchesStatus =
+        paymentStatusFilter === 'ALL' || p.status === paymentStatusFilter;
+
+      const matchesAdjustment =
+        paymentAdjustmentFilter === 'ALL' ||
+        (paymentAdjustmentFilter === 'HAS_ADJUSTMENT' && p.additionalPaymentStatus !== 'NONE') ||
+        (paymentAdjustmentFilter === 'PENDING_SUBMISSION' && p.additionalPaymentStatus === 'REQUESTED') ||
+        (paymentAdjustmentFilter === 'SUBMITTED' && p.additionalPaymentStatus === 'SUBMITTED') ||
+        (paymentAdjustmentFilter === 'VERIFIED' && p.additionalPaymentStatus === 'VERIFIED');
+
+      const q = paymentSearch.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        p.trxId?.toLowerCase().includes(q) ||
+        p.additionalTrxId?.toLowerCase().includes(q) ||
+        p.senderPhone?.toLowerCase().includes(q) ||
+        p.customerName?.toLowerCase().includes(q) ||
+        p.customerEmail?.toLowerCase().includes(q) ||
+        p.productName?.toLowerCase().includes(q) ||
+        String(p.requestId).includes(q) ||
+        String(p.id).includes(q);
+
+      return matchesStatus && matchesAdjustment && matchesSearch;
+    });
+  }, [payments, paymentStatusFilter, paymentAdjustmentFilter, paymentSearch]);
+
+  // Counts for alert badges
   const openComplaintsCount = complaints.filter(
     (c) => c.status === 'OPEN' || c.status === 'IN_REVIEW'
   ).length;
 
-  const formatDate = (isoString) => {
-    if (!isoString) return '—';
+  const unverifiedPaymentsCount = payments.filter(
+    (p) => p.status === 'SUBMITTED' || p.additionalPaymentStatus === 'SUBMITTED'
+  ).length;
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
     try {
-      const d = new Date(isoString);
-      return d.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+      return new Date(dateStr).toLocaleString();
     } catch {
-      return isoString;
+      return dateStr;
     }
   };
 
   return (
     <div className="admin-page">
-      {/* Admin Header */}
-      <div className="admin-header-row">
-        <div>
-          <div className="admin-badge-label">
-            <span className="admin-lock-icon">🛡️</span> Administrator Control Center
+      {/* Top Banner & Header */}
+      <div className="admin-header-card">
+        <div className="admin-header-main">
+          <div>
+            <div className="admin-badge-row">
+              <span className="admin-security-badge">KUET Admin Panel</span>
+              <span className="admin-user-tag">{user?.fullName || 'Administrator'}</span>
+            </div>
+            <h1 className="admin-title">Platform Operations Center</h1>
+            <p className="admin-subtitle">
+              Monitor orders, manage dispute complaints, verify MFS payments, and review campus users
+            </p>
           </div>
-          <h1 className="admin-page-title">Platform Oversight Panel</h1>
-          <p className="admin-page-subtitle">
-            Manage student users, review platform delivery requests, and resolve dispute complaints.
-          </p>
+          <div className="admin-header-actions">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => loadAdminData(true)}
+              isLoading={isRefreshing}
+            >
+              ↻ Refresh Data
+            </Button>
+          </div>
         </div>
 
-        <div className="admin-header-actions">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => loadAdminData(true)}
-            isLoading={isRefreshing}
-            disabled={isRefreshing}
-          >
-            ↻ Refresh Data
-          </Button>
-        </div>
-      </div>
-
-      {/* Global Error Banner */}
-      {error && (
-        <div className="ui-alert ui-alert--error" role="alert">
-          {error}
-        </div>
-      )}
-
-      {/* Overview Stats Bar */}
-      <div className="admin-stats-grid">
-        <div className="admin-stat-card">
-          <span className="admin-stat-icon">👥</span>
-          <div className="admin-stat-info">
+        {/* Global Summary Stats */}
+        <div className="admin-stats-strip">
+          <div className="admin-stat-item">
             <span className="admin-stat-label">Total Users</span>
             <span className="admin-stat-value">{users.length}</span>
           </div>
-        </div>
-
-        <div className="admin-stat-card">
-          <span className="admin-stat-icon">📦</span>
-          <div className="admin-stat-info">
-            <span className="admin-stat-label">Total Requests</span>
+          <div className="admin-stat-item">
+            <span className="admin-stat-label">Total Orders</span>
             <span className="admin-stat-value">{requests.length}</span>
           </div>
-        </div>
-
-        <div className="admin-stat-card admin-stat-card--attention">
-          <span className="admin-stat-icon">⚠️</span>
-          <div className="admin-stat-info">
-            <span className="admin-stat-label">Pending Complaints</span>
-            <span className="admin-stat-value">{openComplaintsCount}</span>
+          <div className="admin-stat-item">
+            <span className="admin-stat-label">Total Payments</span>
+            <span className="admin-stat-value">{payments.length}</span>
           </div>
-        </div>
-
-        <div className="admin-stat-card">
-          <span className="admin-stat-icon">✅</span>
-          <div className="admin-stat-info">
-            <span className="admin-stat-label">Resolved Complaints</span>
-            <span className="admin-stat-value">
-              {complaints.filter((c) => c.status === 'RESOLVED').length}
+          <div className="admin-stat-item">
+            <span className="admin-stat-label">Unverified Payments</span>
+            <span className={`admin-stat-value ${unverifiedPaymentsCount > 0 ? 'text-danger' : ''}`}>
+              {unverifiedPaymentsCount}
+            </span>
+          </div>
+          <div className="admin-stat-item">
+            <span className="admin-stat-label">Open Complaints</span>
+            <span className={`admin-stat-value ${openComplaintsCount > 0 ? 'text-danger' : ''}`}>
+              {openComplaintsCount}
             </span>
           </div>
         </div>
       </div>
 
+      {error && (
+        <div className="ui-alert ui-alert--error mt-3" role="alert">
+          <strong>Error loading data: </strong> {error}
+        </div>
+      )}
+
       {/* Navigation Tabs */}
       <div className="admin-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'payments'}
+          className={`admin-tab ${activeTab === 'payments' ? 'admin-tab--active' : ''}`}
+          onClick={() => setActiveTab('payments')}
+        >
+          <span>💳 Payments & MFS</span>
+          {unverifiedPaymentsCount > 0 ? (
+            <span className="admin-tab-count admin-tab-count--alert">
+              {unverifiedPaymentsCount}
+            </span>
+          ) : (
+            <span className="admin-tab-count">{payments.length}</span>
+          )}
+        </button>
+
         <button
           type="button"
           role="tab"
@@ -305,7 +421,182 @@ export default function AdminPage() {
       ) : (
         <div className="admin-tab-content">
           {/* ============================================================ */}
-          {/* TAB 1: COMPLAINTS QUEUE                                       */}
+          {/* TAB 1: PAYMENTS & MFS VERIFICATION                            */}
+          {/* ============================================================ */}
+          {activeTab === 'payments' && (
+            <div className="payments-tab">
+              {/* Payments Filter Toolbar */}
+              <div className="admin-toolbar" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
+                <div className="admin-search-box" style={{ flex: '1 1 300px' }}>
+                  <Input
+                    name="paymentSearch"
+                    placeholder="Search by TrxID, Customer, Partner, Phone, Request ID..."
+                    value={paymentSearch}
+                    onChange={(e) => setPaymentSearch(e.target.value)}
+                  />
+                </div>
+
+                <div className="admin-filter-group">
+                  <span className="admin-filter-label">Initial Status:</span>
+                  <select
+                    className="ui-input ui-select ui-select--compact"
+                    value={paymentStatusFilter}
+                    onChange={(e) => setPaymentStatusFilter(e.target.value)}
+                  >
+                    <option value="ALL">All Statuses</option>
+                    <option value="SUBMITTED">SUBMITTED (Awaiting Verification)</option>
+                    <option value="VERIFIED">VERIFIED</option>
+                    <option value="PENDING">PENDING</option>
+                    <option value="SIMULATED_PAID">SIMULATED PAID</option>
+                  </select>
+                </div>
+
+                <div className="admin-filter-group">
+                  <span className="admin-filter-label">Price Adjustment:</span>
+                  <select
+                    className="ui-input ui-select ui-select--compact"
+                    value={paymentAdjustmentFilter}
+                    onChange={(e) => setPaymentAdjustmentFilter(e.target.value)}
+                  >
+                    <option value="ALL">All Orders</option>
+                    <option value="HAS_ADJUSTMENT">Has Price Adjustment</option>
+                    <option value="PENDING_SUBMISSION">Adjustment Requested (Unpaid)</option>
+                    <option value="SUBMITTED">Adjustment Submitted (Awaiting Verification)</option>
+                    <option value="VERIFIED">Adjustment Verified</option>
+                  </select>
+                </div>
+              </div>
+
+              {filteredPayments.length === 0 ? (
+                <Card className="empty-state-card">
+                  <div className="empty-state">
+                    <span className="empty-state__icon">💳</span>
+                    <h3>No payments found</h3>
+                    <p>Try modifying your search or filter options.</p>
+                  </div>
+                </Card>
+              ) : (
+                <div className="admin-table-container">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Req #</th>
+                        <th>Product & Customer</th>
+                        <th>Method</th>
+                        <th>Initial Total</th>
+                        <th>TrxID</th>
+                        <th>Initial Status</th>
+                        <th>Need More Extra</th>
+                        <th>Adjustment Status</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPayments.map((p) => {
+                        const hasAdjustment = p.additionalPaymentStatus !== 'NONE';
+                        return (
+                          <tr key={p.id}>
+                            <td className="table-cell-bold">#{p.requestId || p.id}</td>
+                            <td>
+                              <div style={{ fontWeight: 600 }}>{p.productName || 'Order'}</div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                {p.customerName} ({p.customerEmail})
+                              </div>
+                            </td>
+                            <td>
+                              <span style={{
+                                padding: '0.2rem 0.5rem',
+                                borderRadius: '4px',
+                                fontSize: '0.8rem',
+                                fontWeight: 700,
+                                background: p.paymentMethod === 'BKASH' ? '#fdf2f8' : p.paymentMethod === 'NAGAD' ? '#fff7ed' : '#f1f5f9',
+                                color: p.paymentMethod === 'BKASH' ? '#be185d' : p.paymentMethod === 'NAGAD' ? '#c2410c' : '#475569',
+                                border: p.paymentMethod === 'BKASH' ? '1px solid #fbcfe8' : p.paymentMethod === 'NAGAD' ? '1px solid #fed7aa' : '1px solid #cbd5e1'
+                              }}>
+                                {p.paymentMethod || 'DIRECT'}
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ fontWeight: 700 }}>৳{parseFloat(p.total).toFixed(2)}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                Item: ৳{parseFloat(p.productCost).toFixed(2)} + Fee: ৳{parseFloat(p.gatewayFee || 0).toFixed(2)} + Del: ৳{parseFloat(p.deliveryFee).toFixed(2)}
+                              </div>
+                            </td>
+                            <td>
+                              {p.trxId ? (
+                                <code style={{ fontSize: '0.85rem' }}>{p.trxId}</code>
+                              ) : (
+                                <span className="text-muted">—</span>
+                              )}
+                              {p.senderPhone && (
+                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                  Ph: {p.senderPhone}
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              <span style={{
+                                padding: '0.2rem 0.5rem',
+                                borderRadius: '4px',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                background: p.status === 'VERIFIED' ? '#dcfce7' : p.status === 'SUBMITTED' ? '#dbeafe' : '#f1f5f9',
+                                color: p.status === 'VERIFIED' ? '#15803d' : p.status === 'SUBMITTED' ? '#1d4ed8' : '#475569'
+                              }}>
+                                {p.status}
+                              </span>
+                            </td>
+                            <td>
+                              {hasAdjustment ? (
+                                <div>
+                                  <div style={{ fontWeight: 600, color: '#b45309' }}>
+                                    +৳{parseFloat(p.additionalTotal).toFixed(2)}
+                                  </div>
+                                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                    (৳{parseFloat(p.additionalAmount).toFixed(2)} + fee)
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-muted">None</span>
+                              )}
+                            </td>
+                            <td>
+                              {hasAdjustment ? (
+                                <span style={{
+                                  padding: '0.2rem 0.5rem',
+                                  borderRadius: '4px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  background: p.additionalPaymentStatus === 'VERIFIED' ? '#dcfce7' : p.additionalPaymentStatus === 'SUBMITTED' ? '#dbeafe' : '#fef3c7',
+                                  color: p.additionalPaymentStatus === 'VERIFIED' ? '#15803d' : p.additionalPaymentStatus === 'SUBMITTED' ? '#1d4ed8' : '#b45309'
+                                }}>
+                                  {p.additionalPaymentStatus}
+                                </span>
+                              ) : (
+                                <span className="text-muted">—</span>
+                              )}
+                            </td>
+                            <td>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleOpenPayment(p)}
+                              >
+                                Review & Verify
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* TAB 2: COMPLAINTS QUEUE                                       */}
           {/* ============================================================ */}
           {activeTab === 'complaints' && (
             <div className="complaints-tab">
@@ -406,7 +697,7 @@ export default function AdminPage() {
                           size="sm"
                           onClick={() => handleOpenComplaint(complaint)}
                         >
-                          Review & Resolve Complaint
+                          Manage Dispute
                         </Button>
                       </div>
                     </Card>
@@ -417,7 +708,7 @@ export default function AdminPage() {
           )}
 
           {/* ============================================================ */}
-          {/* TAB 2: REQUESTS REGISTRY                                      */}
+          {/* TAB 3: REQUESTS REGISTRY                                      */}
           {/* ============================================================ */}
           {activeTab === 'requests' && (
             <div className="requests-tab">
@@ -426,27 +717,27 @@ export default function AdminPage() {
                 <div className="admin-search-box">
                   <Input
                     name="requestSearch"
-                    placeholder="Search by product, customer, or ID..."
+                    placeholder="Search by product, customer name, pickup zone, ID..."
                     value={requestSearch}
                     onChange={(e) => setRequestSearch(e.target.value)}
                   />
                 </div>
 
                 <div className="admin-filter-group">
-                  <span className="admin-filter-label">Status:</span>
+                  <span className="admin-filter-label">Filter Status:</span>
                   <select
                     className="ui-input ui-select ui-select--compact"
                     value={requestStatusFilter}
                     onChange={(e) => setRequestStatusFilter(e.target.value)}
                   >
                     <option value="ALL">All Statuses</option>
-                    <option value="REQUESTED">Requested</option>
-                    <option value="ACCEPTED">Accepted</option>
-                    <option value="COLLECTED">Collected</option>
-                    <option value="RETURNING">Returning</option>
-                    <option value="READY_FOR_DELIVERY">Ready for Delivery</option>
-                    <option value="DELIVERED">Delivered</option>
-                    <option value="CANCELLED">Cancelled</option>
+                    <option value="REQUESTED">REQUESTED</option>
+                    <option value="ACCEPTED">ACCEPTED</option>
+                    <option value="COLLECTED">COLLECTED</option>
+                    <option value="RETURNING">RETURNING</option>
+                    <option value="READY_FOR_DELIVERY">READY FOR DELIVERY</option>
+                    <option value="DELIVERED">DELIVERED</option>
+                    <option value="CANCELLED">CANCELLED</option>
                   </select>
                 </div>
               </div>
@@ -455,8 +746,8 @@ export default function AdminPage() {
                 <Card className="empty-state-card">
                   <div className="empty-state">
                     <span className="empty-state__icon">🔍</span>
-                    <h3>No matching requests</h3>
-                    <p>Try adjusting your search query or status filter.</p>
+                    <h3>No matching requests found</h3>
+                    <p>Try modifying your search or filter.</p>
                   </div>
                 </Card>
               ) : (
@@ -465,13 +756,11 @@ export default function AdminPage() {
                     <thead>
                       <tr>
                         <th>ID</th>
-                        <th>Product</th>
-                        <th>Category</th>
-                        <th>Qty</th>
-                        <th>Pickup Area</th>
-                        <th>Budget</th>
+                        <th>Product Name</th>
                         <th>Customer</th>
-                        <th>Matched Trip</th>
+                        <th>Pickup Zone</th>
+                        <th>Budget</th>
+                        <th>Payment Total</th>
                         <th>Status</th>
                         <th>Created</th>
                         <th>Action</th>
@@ -483,20 +772,20 @@ export default function AdminPage() {
                           <td className="table-cell-bold">#{req.id}</td>
                           <td className="table-cell-title">{req.productName}</td>
                           <td>
-                            <span className="category-pill">{req.category || 'General'}</span>
+                            {req.customerName}
+                            <span className="table-cell-sub"> (ID: {req.customerId})</span>
                           </td>
-                          <td>{req.quantity}</td>
+                          <td>{req.pickupArea?.replace(/_/g, ' ')}</td>
                           <td>
-                            <span className="area-pill">{req.pickupArea?.replace('_', ' ')}</span>
+                            {req.budget != null ? `৳${parseFloat(req.budget).toFixed(2)}` : '—'}
                           </td>
-                          <td>{req.budget ? `৳${req.budget}` : '—'}</td>
                           <td>
-                            <div className="user-table-cell">
-                              <span>{req.customerName || 'Customer'}</span>
-                              <span className="user-subid">ID: {req.customerId}</span>
-                            </div>
+                            {req.payment ? (
+                              <span style={{ fontWeight: 600 }}>৳{parseFloat(req.payment.total).toFixed(2)}</span>
+                            ) : (
+                              '—'
+                            )}
                           </td>
-                          <td>{req.matchedTripId ? `#${req.matchedTripId}` : '—'}</td>
                           <td>
                             <StatusBadge status={req.status} size="sm" />
                           </td>
@@ -520,7 +809,7 @@ export default function AdminPage() {
           )}
 
           {/* ============================================================ */}
-          {/* TAB 3: USERS DIRECTORY                                        */}
+          {/* TAB 4: USERS DIRECTORY                                        */}
           {/* ============================================================ */}
           {activeTab === 'users' && (
             <div className="users-tab">
@@ -611,7 +900,204 @@ export default function AdminPage() {
       )}
 
       {/* ============================================================ */}
-      {/* MODAL 1: COMPLAINT MANAGEMENT MODAL                            */}
+      {/* MODAL 1: PAYMENT REVIEW & VERIFICATION MODAL                  */}
+      {/* ============================================================ */}
+      {selectedPayment && (
+        <div className="admin-modal-backdrop" onClick={handleClosePaymentModal}>
+          <div
+            className="admin-modal-content"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="payment-modal-title"
+            style={{ maxWidth: '640px' }}
+          >
+            <div className="admin-modal-header">
+              <div>
+                <span className="complaint-id-tag">#PAY-{selectedPayment.id} (Order #{selectedPayment.requestId})</span>
+                <h2 id="payment-modal-title" className="admin-modal-title">
+                  MFS Payment Verification
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="admin-modal-close"
+                onClick={handleClosePaymentModal}
+                aria-label="Close modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="admin-modal-body">
+              {paymentActionError && (
+                <div className="ui-alert ui-alert--error" role="alert">
+                  {paymentActionError}
+                </div>
+              )}
+
+              {paymentActionSuccess && (
+                <div className="ui-alert ui-alert--success" role="alert">
+                  {paymentActionSuccess}
+                </div>
+              )}
+
+              {/* Order & Parties Info */}
+              <div className="modal-meta-grid">
+                <div>
+                  <span className="meta-label">Product Name</span>
+                  <span className="meta-val" style={{ fontWeight: 600 }}>{selectedPayment.productName || 'Order'}</span>
+                </div>
+                <div>
+                  <span className="meta-label">Customer</span>
+                  <span className="meta-val">{selectedPayment.customerName} ({selectedPayment.customerEmail})</span>
+                </div>
+                <div>
+                  <span className="meta-label">Assigned Partner</span>
+                  <span className="meta-val">{selectedPayment.partnerName || 'Not yet assigned'}</span>
+                </div>
+                <div>
+                  <span className="meta-label">Created At</span>
+                  <span className="meta-val">{formatDate(selectedPayment.createdAt)}</span>
+                </div>
+              </div>
+
+              {/* Initial Payment Box */}
+              <div style={{
+                marginTop: '1rem',
+                padding: '1rem',
+                background: '#f8fafc',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <h4 style={{ fontWeight: 600 }}>1. Upfront Payment Details</h4>
+                  <span style={{
+                    padding: '0.2rem 0.5rem',
+                    borderRadius: '4px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    background: selectedPayment.status === 'VERIFIED' ? '#dcfce7' : '#dbeafe',
+                    color: selectedPayment.status === 'VERIFIED' ? '#15803d' : '#1d4ed8'
+                  }}>
+                    {selectedPayment.status}
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.875rem', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                  <div><strong>Method:</strong> {selectedPayment.paymentMethod || 'Direct'}</div>
+                  <div><strong>Sender Phone:</strong> {selectedPayment.senderPhone || '—'}</div>
+                  <div><strong>TrxID:</strong> <code>{selectedPayment.trxId || '—'}</code></div>
+                  <div><strong>Product Cost:</strong> ৳{parseFloat(selectedPayment.productCost).toFixed(2)}</div>
+                  <div><strong>Delivery Fee:</strong> ৳{parseFloat(selectedPayment.deliveryFee).toFixed(2)}</div>
+                  <div><strong>MFS Fee (1.39%):</strong> ৳{parseFloat(selectedPayment.gatewayFee || 0).toFixed(2)}</div>
+                  <div style={{ gridColumn: 'span 2', fontSize: '1rem', fontWeight: 700, color: 'var(--color-primary)' }}>
+                    Total Billed: ৳{parseFloat(selectedPayment.total).toFixed(2)}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem' }}>
+                  {selectedPayment.status !== 'VERIFIED' && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      isLoading={isVerifyingPayment}
+                      onClick={() => handleVerifyInitialPayment('VERIFIED')}
+                    >
+                      ✓ Mark Initial Payment as VERIFIED
+                    </Button>
+                  )}
+                  {selectedPayment.status === 'VERIFIED' && (
+                    <span style={{ fontSize: '0.85rem', color: '#15803d', fontWeight: 600 }}>
+                      ✓ Initial payment is verified
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Price Adjustment Box */}
+              {selectedPayment.additionalPaymentStatus !== 'NONE' && (
+                <div style={{
+                  marginTop: '1rem',
+                  padding: '1rem',
+                  background: '#fffbeb',
+                  border: '1px solid #fde68a',
+                  borderRadius: 'var(--radius-sm)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <h4 style={{ fontWeight: 600, color: '#92400e' }}>2. Price Adjustment (Need More)</h4>
+                    <span style={{
+                      padding: '0.2rem 0.5rem',
+                      borderRadius: '4px',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      background: selectedPayment.additionalPaymentStatus === 'VERIFIED' ? '#dcfce7' : '#fef3c7',
+                      color: selectedPayment.additionalPaymentStatus === 'VERIFIED' ? '#15803d' : '#b45309'
+                    }}>
+                      {selectedPayment.additionalPaymentStatus}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.875rem', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                    <div><strong>Extra Product Cost:</strong> ৳{parseFloat(selectedPayment.additionalAmount).toFixed(2)}</div>
+                    <div><strong>Extra MFS Fee:</strong> ৳{parseFloat(selectedPayment.additionalFee).toFixed(2)}</div>
+                    <div style={{ gridColumn: 'span 2', fontWeight: 700, color: '#b45309' }}>
+                      Total Extra Billed: ৳{parseFloat(selectedPayment.additionalTotal).toFixed(2)}
+                    </div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <strong>Reason:</strong> "{selectedPayment.needMoreReason}"
+                    </div>
+                    <div><strong>Method:</strong> {selectedPayment.additionalPaymentMethod || '—'}</div>
+                    <div><strong>Sender Phone:</strong> {selectedPayment.additionalSenderPhone || '—'}</div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <strong>Additional TrxID:</strong> <code>{selectedPayment.additionalTrxId || '—'}</code>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem' }}>
+                    {selectedPayment.additionalPaymentStatus !== 'VERIFIED' && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        isLoading={isVerifyingPayment}
+                        onClick={() => handleVerifyAdditionalPayment('VERIFIED')}
+                      >
+                        ✓ Mark Price Adjustment as VERIFIED
+                      </Button>
+                    )}
+                    {selectedPayment.additionalPaymentStatus === 'VERIFIED' && (
+                      <span style={{ fontSize: '0.85rem', color: '#15803d', fontWeight: 600 }}>
+                        ✓ Extra payment is verified
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Admin Notes */}
+              <div style={{ marginTop: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+                  Admin Notes / Verification Log
+                </label>
+                <textarea
+                  className="ui-input ui-textarea"
+                  rows="2"
+                  value={paymentAdminNotes}
+                  onChange={(e) => setPaymentAdminNotes(e.target.value)}
+                  placeholder="Notes about statement verification or transaction..."
+                />
+              </div>
+
+              <div className="form-actions" style={{ marginTop: '1rem' }}>
+                <Button variant="outline" size="sm" onClick={handleClosePaymentModal}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL 2: COMPLAINT MANAGEMENT MODAL                            */}
       {/* ============================================================ */}
       {selectedComplaint && (
         <div className="admin-modal-backdrop" onClick={handleCloseComplaintModal}>
@@ -661,11 +1147,13 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div>
-                  <span className="meta-label">Date Filed</span>
-                  <span className="meta-val">{formatDate(selectedComplaint.createdAt)}</span>
+                  <span className="meta-label">Associated Order</span>
+                  <span className="meta-val">
+                    {selectedComplaint.requestId ? `#${selectedComplaint.requestId}` : 'None'}
+                  </span>
                 </div>
                 <div>
-                  <span className="meta-label">Complainant</span>
+                  <span className="meta-label">Raised By</span>
                   <span className="meta-val">
                     {selectedComplaint.raisedByName || 'Student'} (ID: {selectedComplaint.raisedById})
                   </span>
@@ -675,66 +1163,79 @@ export default function AdminPage() {
                   <span className="meta-val">
                     {selectedComplaint.againstUserId
                       ? `${selectedComplaint.againstUserName || 'User'} (ID: ${selectedComplaint.againstUserId})`
-                      : 'None specified'}
+                      : 'None specified / General'}
                   </span>
+                </div>
+                <div>
+                  <span className="meta-label">Filed On</span>
+                  <span className="meta-val">{formatDate(selectedComplaint.createdAt)}</span>
+                </div>
+                <div>
+                  <span className="meta-label">Resolved On</span>
+                  <span className="meta-val">{formatDate(selectedComplaint.resolvedAt)}</span>
                 </div>
               </div>
 
-              {/* Full Description */}
+              {/* Complaint Description */}
               <div className="modal-field-group">
-                <span className="meta-label">Complaint Description</span>
+                <span className="meta-label">Student Complaint Description</span>
                 <div className="complaint-description-panel">
                   {selectedComplaint.description}
                 </div>
               </div>
 
-              {/* Admin Notes Form */}
+              {/* Admin Resolution Notes */}
               <div className="modal-field-group">
                 <label htmlFor="admin-notes-textarea" className="meta-label">
-                  Administrative Notes & Action Log:
+                  Administrative Resolution Notes
                 </label>
                 <textarea
                   id="admin-notes-textarea"
-                  rows={4}
+                  rows="3"
                   className="ui-input ui-textarea"
-                  placeholder="Record investigations, partner warnings, refund details, or resolution rationale..."
+                  placeholder="Record investigation findings, actions taken, or resolution summary..."
                   value={adminNotesInput}
                   onChange={(e) => setAdminNotesInput(e.target.value)}
                 />
               </div>
 
-              {/* Action Buttons to set status */}
-              <div className="modal-action-bar">
-                <div className="modal-status-buttons">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    isLoading={isUpdatingComplaint}
-                    disabled={isUpdatingComplaint || selectedComplaint.status === 'IN_REVIEW'}
-                    onClick={() => handleUpdateComplaintStatus('IN_REVIEW')}
-                  >
-                    Set Status: IN_REVIEW
-                  </Button>
+              {/* Status Transition Actions */}
+              <div className="modal-action-section">
+                <span className="meta-label">Update Status & Save:</span>
+                <div className="modal-btn-row">
+                  {selectedComplaint.status !== 'IN_REVIEW' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      isLoading={isUpdatingComplaint}
+                      onClick={() => handleUpdateComplaintStatus('IN_REVIEW')}
+                    >
+                      Set In Review
+                    </Button>
+                  )}
 
-                  <Button
-                    type="button"
-                    variant="primary"
-                    isLoading={isUpdatingComplaint}
-                    disabled={isUpdatingComplaint || selectedComplaint.status === 'RESOLVED'}
-                    onClick={() => handleUpdateComplaintStatus('RESOLVED')}
-                  >
-                    Set Status: RESOLVED
-                  </Button>
+                  {selectedComplaint.status !== 'RESOLVED' && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      isLoading={isUpdatingComplaint}
+                      onClick={() => handleUpdateComplaintStatus('RESOLVED')}
+                    >
+                      ✓ Mark as Resolved
+                    </Button>
+                  )}
+
+                  {selectedComplaint.status !== 'OPEN' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      isLoading={isUpdatingComplaint}
+                      onClick={() => handleUpdateComplaintStatus('OPEN')}
+                    >
+                      Re-open Complaint
+                    </Button>
+                  )}
                 </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCloseComplaintModal}
-                >
-                  Close
-                </Button>
               </div>
             </div>
           </div>
@@ -742,7 +1243,7 @@ export default function AdminPage() {
       )}
 
       {/* ============================================================ */}
-      {/* MODAL 2: REQUEST DETAILS MODAL                                 */}
+      {/* MODAL 3: REQUEST DETAILS INSPECTION MODAL                      */}
       {/* ============================================================ */}
       {selectedRequestDetails && (
         <div
@@ -804,7 +1305,7 @@ export default function AdminPage() {
                   <span className="meta-val">{selectedRequestDetails.quantity}</span>
                 </div>
                 <div>
-                  <span className="meta-label">Budget</span>
+                  <span className="meta-label">Estimated Budget</span>
                   <span className="meta-val">
                     {selectedRequestDetails.budget ? `৳${selectedRequestDetails.budget}` : 'None specified'}
                   </span>
@@ -830,7 +1331,29 @@ export default function AdminPage() {
                 </div>
               )}
 
-              <div className="form-actions">
+              {/* Payment Details if available */}
+              {selectedRequestDetails.payment && (
+                <div style={{
+                  marginTop: '1rem',
+                  padding: '1rem',
+                  background: '#f8fafc',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)'
+                }}>
+                  <h4 style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Financial & Payment Details:</h4>
+                  <div style={{ fontSize: '0.875rem' }}>
+                    <div>Total Initial Billed: <strong>৳{parseFloat(selectedRequestDetails.payment.total).toFixed(2)}</strong> ({selectedPayment?.paymentMethod || selectedRequestDetails.payment.paymentMethod || 'Direct'}, TrxID: <code>{selectedRequestDetails.payment.trxId || '—'}</code>)</div>
+                    <div>Payment Status: <strong>{selectedRequestDetails.payment.status}</strong></div>
+                    {selectedRequestDetails.payment.additionalPaymentStatus !== 'NONE' && (
+                      <div style={{ marginTop: '0.5rem', color: '#b45309' }}>
+                        Price Adjustment: <strong>+৳{parseFloat(selectedRequestDetails.payment.additionalTotal).toFixed(2)}</strong> (Status: {selectedRequestDetails.payment.additionalPaymentStatus}, TrxID: <code>{selectedRequestDetails.payment.additionalTrxId || '—'}</code>)
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="form-actions" style={{ marginTop: '1rem' }}>
                 <Button
                   variant="outline"
                   onClick={() => setSelectedRequestDetails(null)}

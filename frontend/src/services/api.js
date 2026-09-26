@@ -126,6 +126,23 @@ export const requestsApi = {
       method: 'PUT',
       body: JSON.stringify({ status, note }),
     }, token),
+
+  needMore: (id, { additionalAmount, reason }, token) =>
+    request(`/api/requests/${id}/need-more`, {
+      method: 'POST',
+      body: JSON.stringify({ additionalAmount, reason }),
+    }, token),
+
+  submitAdditionalPayment: (id, { paymentMethod, senderPhone, trxId }, token) =>
+    request(`/api/requests/${id}/additional-payment`, {
+      method: 'POST',
+      body: JSON.stringify({ paymentMethod, senderPhone, trxId }),
+    }, token),
+
+  getPayment: (id, token) =>
+    request(`/api/requests/${id}/payment`, {
+      method: 'GET',
+    }, token),
 };
 
 export const tripsApi = {
@@ -174,6 +191,17 @@ export const adminApi = {
     request(`/api/admin/complaints/${id}`, {
       method: 'PUT',
       body: JSON.stringify({ status, adminNotes }),
+    }, token),
+
+  getPayments: (token) =>
+    request('/api/admin/payments', {
+      method: 'GET',
+    }, token),
+
+  verifyPayment: (id, { status, additionalPaymentStatus, adminNotes }, token) =>
+    request(`/api/admin/payments/${id}/verify`, {
+      method: 'PUT',
+      body: JSON.stringify({ status, additionalPaymentStatus, adminNotes }),
     }, token),
 };
 

@@ -1,9 +1,9 @@
 package com.carry.entity;
 
-public enum PaymentStatus {
-    PENDING,
+public enum AdditionalPaymentStatus {
+    NONE,
+    REQUESTED,
     SUBMITTED,
     VERIFIED,
-    SIMULATED_PAID,
     REJECTED
 }

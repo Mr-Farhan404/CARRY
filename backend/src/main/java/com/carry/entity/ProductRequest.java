@@ -68,6 +68,9 @@ public class ProductRequest {
     @JoinColumn(name = "matched_trip_id")
     private Trip matchedTrip;
 
+    @OneToOne(mappedBy = "request", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private Payment payment;
+
     @Version
     @Builder.Default
     private Integer version = 0;

@@ -1,16 +1,20 @@
 package com.carry.service;
 
+import com.carry.dto.AdminVerifyPaymentDto;
 import com.carry.dto.ComplaintResponseDto;
+import com.carry.dto.PaymentResponseDto;
 import com.carry.dto.ProductRequestResponseDto;
 import com.carry.dto.UpdateComplaintStatusDto;
 import com.carry.dto.UserDto;
 import com.carry.entity.Complaint;
 import com.carry.entity.ComplaintStatus;
+import com.carry.entity.Payment;
 import com.carry.entity.ProductRequest;
 import com.carry.entity.RequestStatus;
 import com.carry.exception.ForbiddenException;
 import com.carry.exception.ResourceNotFoundException;
 import com.carry.repository.ComplaintRepository;
+import com.carry.repository.PaymentRepository;
 import com.carry.repository.ProductRequestRepository;
 import com.carry.repository.UserRepository;
 import com.carry.security.UserDetailsImpl;
@@ -28,6 +32,7 @@ public class AdminService {
     private final ComplaintRepository complaintRepository;
     private final UserRepository userRepository;
     private final ProductRequestRepository productRequestRepository;
+    private final PaymentRepository paymentRepository;
 
     /**
      * Reusable admin verification check used across all admin operations.
@@ -86,5 +91,34 @@ public class AdminService {
         return requests.stream()
                 .map(ProductRequestResponseDto::fromEntity)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<PaymentResponseDto> getAllPayments(UserDetailsImpl currentUser) {
+        verifyAdmin(currentUser);
+        return paymentRepository.findAllByOrderByCreatedAtDesc()
+                .stream()
+                .map(PaymentResponseDto::fromEntity)
+                .toList();
+    }
+
+    @Transactional
+    public PaymentResponseDto verifyPayment(Long id, AdminVerifyPaymentDto dto, UserDetailsImpl currentUser) {
+        verifyAdmin(currentUser);
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + id));
+
+        if (dto.getStatus() != null) {
+            payment.setStatus(dto.getStatus());
+        }
+        if (dto.getAdditionalPaymentStatus() != null) {
+            payment.setAdditionalPaymentStatus(dto.getAdditionalPaymentStatus());
+        }
+        if (dto.getAdminNotes() != null) {
+            payment.setAdminNotes(dto.getAdminNotes());
+        }
+
+        Payment updated = paymentRepository.save(payment);
+        return PaymentResponseDto.fromEntity(updated);
     }
 }

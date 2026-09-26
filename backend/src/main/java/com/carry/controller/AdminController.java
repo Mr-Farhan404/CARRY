@@ -1,6 +1,8 @@
 package com.carry.controller;
 
+import com.carry.dto.AdminVerifyPaymentDto;
 import com.carry.dto.ComplaintResponseDto;
+import com.carry.dto.PaymentResponseDto;
 import com.carry.dto.ProductRequestResponseDto;
 import com.carry.dto.UpdateComplaintStatusDto;
 import com.carry.dto.UserDto;
@@ -47,5 +49,19 @@ public class AdminController {
             @RequestParam(required = false) RequestStatus status,
             @AuthenticationPrincipal UserDetailsImpl currentUser) {
         return ResponseEntity.ok(adminService.getAllRequests(status, currentUser));
+    }
+
+    @GetMapping("/payments")
+    public ResponseEntity<List<PaymentResponseDto>> getPayments(
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        return ResponseEntity.ok(adminService.getAllPayments(currentUser));
+    }
+
+    @PutMapping("/payments/{id}/verify")
+    public ResponseEntity<PaymentResponseDto> verifyPayment(
+            @PathVariable Long id,
+            @RequestBody AdminVerifyPaymentDto dto,
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        return ResponseEntity.ok(adminService.verifyPayment(id, dto, currentUser));
     }
 }

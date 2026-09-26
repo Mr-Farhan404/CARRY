@@ -1,6 +1,7 @@
 package com.carry.dto;
 
 import com.carry.entity.LocationArea;
+import com.carry.entity.Payment;
 import com.carry.entity.ProductRequest;
 import com.carry.entity.RequestStatus;
 import lombok.AllArgsConstructor;
@@ -30,10 +31,15 @@ public class ProductRequestResponseDto {
     private RequestStatus status;
     private Long matchedTripId;
     private Integer version;
+    private PaymentResponseDto payment;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
     public static ProductRequestResponseDto fromEntity(ProductRequest request) {
+        return fromEntity(request, request != null ? request.getPayment() : null);
+    }
+
+    public static ProductRequestResponseDto fromEntity(ProductRequest request, Payment payment) {
         return ProductRequestResponseDto.builder()
                 .id(request.getId())
                 .customerId(request.getCustomer() != null ? request.getCustomer().getId() : null)
@@ -48,6 +54,7 @@ public class ProductRequestResponseDto {
                 .status(request.getStatus())
                 .matchedTripId(request.getMatchedTrip() != null ? request.getMatchedTrip().getId() : null)
                 .version(request.getVersion())
+                .payment(payment != null ? PaymentResponseDto.fromEntity(payment) : null)
                 .createdAt(request.getCreatedAt())
                 .updatedAt(request.getUpdatedAt())
                 .build();

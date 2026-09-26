@@ -25,6 +25,14 @@ export default function RequestDetailPage() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState('');
 
+  // Additional Payment Form State (for customer)
+  const [addPaymentMethod, setAddPaymentMethod] = useState('BKASH');
+  const [addSenderPhone, setAddSenderPhone] = useState('');
+  const [addTrxId, setAddTrxId] = useState('');
+  const [isSubmittingAddPayment, setIsSubmittingAddPayment] = useState(false);
+  const [addPaymentError, setAddPaymentError] = useState('');
+  const [addPaymentSuccess, setAddPaymentSuccess] = useState('');
+
   const loadData = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage('');
@@ -95,6 +103,46 @@ export default function RequestDetailPage() {
     }
   };
 
+  const handleSubmitAdditionalPayment = async (e) => {
+    e.preventDefault();
+    setAddPaymentError('');
+    setAddPaymentSuccess('');
+
+    if (!addSenderPhone.trim()) {
+      setAddPaymentError('Sender phone number is required');
+      return;
+    }
+    if (!/^01[3-9]\d{8}$/.test(addSenderPhone.trim())) {
+      setAddPaymentError('Please enter a valid 11-digit mobile number');
+      return;
+    }
+    if (!addTrxId.trim()) {
+      setAddPaymentError('Transaction ID (TrxID) is required');
+      return;
+    }
+
+    setIsSubmittingAddPayment(true);
+    try {
+      await requestsApi.submitAdditionalPayment(
+        id,
+        {
+          paymentMethod: addPaymentMethod,
+          senderPhone: addSenderPhone.trim(),
+          trxId: addTrxId.trim().toUpperCase(),
+        },
+        token
+      );
+      setAddPaymentSuccess('Remaining payment submitted successfully! The partner can now proceed.');
+      setAddSenderPhone('');
+      setAddTrxId('');
+      await loadData();
+    } catch (err) {
+      setAddPaymentError(err.message || 'Failed to submit remaining payment.');
+    } finally {
+      setIsSubmittingAddPayment(false);
+    }
+  };
+
   const isCustomer = user && request && request.customerId === user.id;
   const canCancel =
     isCustomer &&
@@ -121,6 +169,8 @@ export default function RequestDetailPage() {
       </div>
     );
   }
+
+  const payment = request.payment;
 
   return (
     <div className="request-detail-page">
@@ -203,6 +253,226 @@ export default function RequestDetailPage() {
         )}
       </Card>
 
+      {/* Price Adjustment "Need More" Alert & Submission Form */}
+      {payment?.additionalPaymentStatus === 'REQUESTED' && (
+        <Card
+          title="⚠️ Price Adjustment Required (Need More Payment)"
+          className="detail-card"
+          style={{ border: '2px solid #f59e0b', background: '#fffbeb' }}
+        >
+          <div style={{ color: '#92400e', marginBottom: '1rem' }}>
+            <p style={{ fontWeight: 600, fontSize: '1rem' }}>
+              The delivery partner found that the product costs more at the store.
+            </p>
+            <div style={{
+              background: '#fff',
+              border: '1px solid #fde68a',
+              borderRadius: 'var(--radius-sm)',
+              padding: '0.85rem',
+              margin: '0.75rem 0'
+            }}>
+              <div><strong>Additional Product Cost:</strong> ৳{parseFloat(payment.additionalAmount).toFixed(2)}</div>
+              <div><strong>MFS Fee (1.39%):</strong> ৳{parseFloat(payment.additionalFee).toFixed(2)}</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#b45309', marginTop: '0.35rem' }}>
+                Remaining Amount to Pay: ৳{parseFloat(payment.additionalTotal).toFixed(2)}
+              </div>
+              <div style={{ marginTop: '0.5rem', fontStyle: 'italic' }}>
+                <strong>Reason:</strong> "{payment.needMoreReason}"
+              </div>
+            </div>
+            {!isCustomer && (
+              <p style={{ fontSize: '0.9rem', color: '#b45309' }}>
+                ⏳ Waiting for customer to fulfill the remaining payment. Collection is paused until payment is submitted.
+              </p>
+            )}
+          </div>
+
+          {/* If the current user is customer, show payment fulfillment form */}
+          {isCustomer && (
+            <div style={{
+              background: '#fff',
+              padding: '1.25rem',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid #fde68a'
+            }}>
+              <h4 style={{ fontWeight: 600, marginBottom: '0.5rem', color: '#1e3a8a' }}>
+                Fulfill Remaining Payment (৳{parseFloat(payment.additionalTotal).toFixed(2)})
+              </h4>
+              <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
+                Send Money <strong>৳{parseFloat(payment.additionalTotal).toFixed(2)}</strong> to Carry Campus Account:
+                <strong style={{ color: 'var(--color-primary)' }}> 01700000000</strong> (bKash / Nagad Personal)
+              </p>
+
+              {addPaymentSuccess && (
+                <div className="ui-alert ui-alert--success" style={{ marginBottom: '1rem' }}>
+                  {addPaymentSuccess}
+                </div>
+              )}
+              {addPaymentError && (
+                <div className="ui-alert ui-alert--error" style={{ marginBottom: '1rem' }}>
+                  {addPaymentError}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmitAdditionalPayment}>
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+                    Payment Method:
+                  </label>
+                  <div style={{ display: 'flex', gap: '1rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="addPaymentMethod"
+                        value="BKASH"
+                        checked={addPaymentMethod === 'BKASH'}
+                        onChange={(e) => setAddPaymentMethod(e.target.value)}
+                      />
+                      <span>bKash</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="addPaymentMethod"
+                        value="NAGAD"
+                        checked={addPaymentMethod === 'NAGAD'}
+                        onChange={(e) => setAddPaymentMethod(e.target.value)}
+                      />
+                      <span>Nagad</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="form-grid">
+                  <Input
+                    label="Sender Phone"
+                    type="text"
+                    value={addSenderPhone}
+                    onChange={(e) => setAddSenderPhone(e.target.value)}
+                    placeholder="017xxxxxxxx"
+                    required
+                  />
+                  <Input
+                    label="Transaction ID (TrxID)"
+                    type="text"
+                    value={addTrxId}
+                    onChange={(e) => setAddTrxId(e.target.value)}
+                    placeholder="e.g. 9J8K2LA19"
+                    required
+                  />
+                </div>
+
+                <div style={{ marginTop: '1rem' }}>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="md"
+                    isLoading={isSubmittingAddPayment}
+                  >
+                    Submit Remaining Payment (৳{parseFloat(payment.additionalTotal).toFixed(2)})
+                  </Button>
+                </div>
+              </form>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Remaining Payment Submitted Banner */}
+      {payment?.additionalPaymentStatus === 'SUBMITTED' && (
+        <div className="ui-alert ui-alert--success" style={{ marginBottom: '1.5rem' }}>
+          ✅ <strong>Remaining Payment Submitted:</strong> ৳{parseFloat(payment.additionalTotal).toFixed(2)} via {payment.additionalPaymentMethod} (TrxID: {payment.additionalTrxId}). Delivery partner has been unblocked to proceed with collection.
+        </div>
+      )}
+
+      {/* Full Payment Breakdown Card */}
+      {payment && (
+        <Card
+          title="Payment Breakdown & MFS Details"
+          subtitle="Transparent financial tracking for item cost, campus delivery, and gateway fee"
+          className="detail-card"
+        >
+          <div className="detail-meta-grid">
+            <div className="detail-meta-item">
+              <span className="detail-meta-label">Product Cost</span>
+              <span className="detail-meta-val">৳{parseFloat(payment.productCost).toFixed(2)}</span>
+            </div>
+            <div className="detail-meta-item">
+              <span className="detail-meta-label">Campus Delivery Fee</span>
+              <span className="detail-meta-val">৳{parseFloat(payment.deliveryFee).toFixed(2)}</span>
+            </div>
+            <div className="detail-meta-item">
+              <span className="detail-meta-label">MFS Fee (1.39%)</span>
+              <span className="detail-meta-val">৳{parseFloat(payment.gatewayFee || 0).toFixed(2)}</span>
+            </div>
+            <div className="detail-meta-item">
+              <span className="detail-meta-label">Initial Total</span>
+              <span className="detail-meta-val" style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
+                ৳{parseFloat(payment.total).toFixed(2)}
+              </span>
+            </div>
+          </div>
+
+          <div style={{
+            marginTop: '1rem',
+            paddingTop: '0.75rem',
+            borderTop: '1px solid var(--color-border)',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '1.5rem',
+            fontSize: '0.9rem'
+          }}>
+            <div>
+              <span style={{ color: 'var(--color-text-muted)' }}>Payment Method: </span>
+              <strong>{payment.paymentMethod || 'Simulated / Direct'}</strong>
+            </div>
+            {payment.senderPhone && (
+              <div>
+                <span style={{ color: 'var(--color-text-muted)' }}>Sender Phone: </span>
+                <strong>{payment.senderPhone}</strong>
+              </div>
+            )}
+            {payment.trxId && (
+              <div>
+                <span style={{ color: 'var(--color-text-muted)' }}>Initial TrxID: </span>
+                <code style={{ background: 'var(--color-bg-app)', padding: '0.2rem 0.4rem', borderRadius: '4px' }}>
+                  {payment.trxId}
+                </code>
+              </div>
+            )}
+            <div>
+              <span style={{ color: 'var(--color-text-muted)' }}>Payment Status: </span>
+              <span style={{
+                fontWeight: 600,
+                color: payment.status === 'VERIFIED' ? '#16a34a' : payment.status === 'SUBMITTED' ? '#2563eb' : '#64748b'
+              }}>
+                {payment.status}
+              </span>
+            </div>
+          </div>
+
+          {payment.additionalPaymentStatus !== 'NONE' && (
+            <div style={{
+              marginTop: '1rem',
+              paddingTop: '0.75rem',
+              borderTop: '1px dashed var(--color-border)',
+              background: '#f8fafc',
+              padding: '0.75rem',
+              borderRadius: 'var(--radius-sm)'
+            }}>
+              <h5 style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Price Adjustment Details:</h5>
+              <div style={{ fontSize: '0.875rem' }}>
+                <span>Extra Cost: ৳{parseFloat(payment.additionalAmount).toFixed(2)} + Fee: ৳{parseFloat(payment.additionalFee).toFixed(2)} = <strong>৳{parseFloat(payment.additionalTotal).toFixed(2)}</strong></span>
+                {payment.additionalTrxId && (
+                  <span style={{ marginLeft: '1rem' }}>Remaining TrxID: <code>{payment.additionalTrxId}</code></span>
+                )}
+                <span style={{ marginLeft: '1rem', fontWeight: 600 }}>Status: {payment.additionalPaymentStatus}</span>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
       {/* Full Status Update Timeline */}
       <Card
         title="Delivery Status Timeline"
@@ -238,67 +508,69 @@ export default function RequestDetailPage() {
       {/* Rating Section - Shown Once Status reaches DELIVERED */}
       {request.status === 'DELIVERED' && (
         <Card
-          title="Partner Rating & Feedback"
-          subtitle="Rate your delivery partner to help build university trust and recompute their public score"
-          className="detail-card rating-card"
+          title="Delivery Partner Rating"
+          subtitle={
+            existingRating
+              ? 'Your feedback has been recorded'
+              : 'Rate your delivery partner experience'
+          }
+          className="detail-card"
         >
           {existingRating ? (
-            <div className="submitted-rating-box">
-              <div className="rating-badge-row">
-                <span className="rating-score-display">
-                  {'★'.repeat(existingRating.score)}{'☆'.repeat(5 - existingRating.score)}
-                </span>
-                <span className="rating-score-num">({existingRating.score} / 5)</span>
+            <div className="existing-rating">
+              <div className="star-display">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <span
+                    key={s}
+                    className={`star-icon ${s <= existingRating.score ? 'star-icon--filled' : 'star-icon--empty'}`}
+                  >
+                    ★
+                  </span>
+                ))}
+                <span className="rating-score-label">({existingRating.score} / 5)</span>
               </div>
-              {existingRating.comment ? (
-                <p className="rating-comment-text">"{existingRating.comment}"</p>
-              ) : (
-                <p className="text-muted">No comment provided.</p>
+              {existingRating.comment && (
+                <p className="rating-comment">"{existingRating.comment}"</p>
               )}
-              <span className="rating-timestamp">
-                Rated on {new Date(existingRating.createdAt).toLocaleDateString()}
+              <span className="rating-date">
+                Submitted on{' '}
+                {new Date(existingRating.createdAt).toLocaleDateString()}
               </span>
             </div>
           ) : isCustomer ? (
             <form onSubmit={handleRatingSubmit} className="rating-form">
               {ratingError && (
-                <div className="ui-alert ui-alert--error" role="alert">
+                <div className="ui-alert ui-alert--error mb-2" role="alert">
                   {ratingError}
                 </div>
               )}
 
-              <div className="rating-selector-group">
-                <label className="ui-input-label">Delivery Score (1 to 5 Stars):</label>
-                <div className="star-rating-buttons">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => setRatingScore(star)}
-                      className={`star-btn ${ratingScore >= star ? 'star-btn--active' : ''}`}
-                      aria-label={`${star} Star${star > 1 ? 's' : ''}`}
-                    >
-                      ★
-                    </button>
-                  ))}
-                  <span className="star-rating-label">
-                    {ratingScore} of 5 Stars
-                  </span>
-                </div>
+              <div className="star-picker">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`star-btn ${s <= ratingScore ? 'star-btn--active' : ''}`}
+                    onClick={() => setRatingScore(s)}
+                    aria-label={`Rate ${s} out of 5 stars`}
+                  >
+                    ★
+                  </button>
+                ))}
+                <span className="rating-score-label">({ratingScore} / 5)</span>
               </div>
 
-              <div className="ui-input-group">
+              <div className="ui-input-group mt-2">
                 <label htmlFor="rating-comment" className="ui-input-label">
-                  Feedback / Comment (optional)
+                  Feedback Comment (Optional)
                 </label>
                 <textarea
                   id="rating-comment"
-                  rows="3"
                   value={ratingComment}
                   onChange={(e) => setRatingComment(e.target.value)}
-                  placeholder="Share details about punctuality, item condition, or delivery communication..."
+                  placeholder="Share details about the delivery timeliness, packaging, or communication..."
                   className="ui-input ui-textarea"
-                  maxLength={500}
+                  rows="3"
                 />
               </div>
 
@@ -307,14 +579,13 @@ export default function RequestDetailPage() {
                 variant="primary"
                 size="md"
                 isLoading={isSubmittingRating}
+                className="mt-2"
               >
-                Submit Delivery Rating
+                Submit Rating
               </Button>
             </form>
           ) : (
-            <p className="text-muted">
-              Only the customer who ordered this item can submit a rating.
-            </p>
+            <p className="text-muted">Awaiting customer rating feedback.</p>
           )}
         </Card>
       )}

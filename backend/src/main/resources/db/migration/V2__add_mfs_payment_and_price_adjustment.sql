@@ -1,0 +1,18 @@
+-- V2: Add bKash / Nagad MFS payment tracking and Need More Price Adjustment fields
+ALTER TABLE payments MODIFY COLUMN status VARCHAR(50) NOT NULL;
+
+ALTER TABLE payments ADD COLUMN payment_method VARCHAR(30) DEFAULT NULL;
+ALTER TABLE payments ADD COLUMN sender_phone VARCHAR(30) DEFAULT NULL;
+ALTER TABLE payments ADD COLUMN trx_id VARCHAR(100) DEFAULT NULL;
+ALTER TABLE payments ADD COLUMN gateway_fee DECIMAL(10,2) DEFAULT 0.00;
+
+ALTER TABLE payments ADD COLUMN additional_amount DECIMAL(10,2) DEFAULT 0.00;
+ALTER TABLE payments ADD COLUMN additional_fee DECIMAL(10,2) DEFAULT 0.00;
+ALTER TABLE payments ADD COLUMN additional_total DECIMAL(10,2) DEFAULT 0.00;
+ALTER TABLE payments ADD COLUMN additional_payment_method VARCHAR(30) DEFAULT NULL;
+ALTER TABLE payments ADD COLUMN additional_sender_phone VARCHAR(30) DEFAULT NULL;
+ALTER TABLE payments ADD COLUMN additional_trx_id VARCHAR(100) DEFAULT NULL;
+ALTER TABLE payments ADD COLUMN additional_payment_status VARCHAR(50) DEFAULT 'NONE';
+ALTER TABLE payments ADD COLUMN need_more_reason TEXT DEFAULT NULL;
+ALTER TABLE payments ADD COLUMN admin_notes TEXT DEFAULT NULL;
+ALTER TABLE payments ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;

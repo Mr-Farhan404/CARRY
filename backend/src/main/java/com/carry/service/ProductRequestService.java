@@ -2,10 +2,14 @@ package com.carry.service;
 
 import com.carry.dto.AcceptRequestDto;
 import com.carry.dto.CreateProductRequest;
+import com.carry.dto.NeedMorePaymentDto;
+import com.carry.dto.PaymentResponseDto;
 import com.carry.dto.ProductRequestResponseDto;
 import com.carry.dto.StatusUpdateResponseDto;
+import com.carry.dto.SubmitAdditionalPaymentDto;
 import com.carry.dto.UpdateProductRequest;
 import com.carry.dto.UpdateRequestStatusDto;
+import com.carry.entity.AdditionalPaymentStatus;
 import com.carry.entity.LocationArea;
 import com.carry.entity.Payment;
 import com.carry.entity.PaymentStatus;
@@ -30,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Collections;
 import java.util.List;
 
@@ -61,7 +66,35 @@ public class ProductRequestService {
                 .build();
 
         ProductRequest saved = productRequestRepository.save(productRequest);
-        return ProductRequestResponseDto.fromEntity(saved);
+
+        // Formula: The need payment = (product prize + product prize*(13.90/1000) + 30) taka
+        BigDecimal cost = request.getBudget() != null ? request.getBudget() : BigDecimal.ZERO;
+        BigDecimal deliveryFee = new BigDecimal("30.00");
+        BigDecimal gatewayFee = cost.multiply(new BigDecimal("0.0139")).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal total = cost.add(deliveryFee).add(gatewayFee);
+
+        PaymentStatus initialStatus = request.getPaymentMethod() != null ? PaymentStatus.SUBMITTED : PaymentStatus.PENDING;
+
+        Payment payment = Payment.builder()
+                .request(saved)
+                .productCost(cost)
+                .deliveryFee(deliveryFee)
+                .gatewayFee(gatewayFee)
+                .total(total)
+                .status(initialStatus)
+                .paymentMethod(request.getPaymentMethod())
+                .senderPhone(request.getSenderPhone())
+                .trxId(request.getTrxId())
+                .additionalAmount(BigDecimal.ZERO)
+                .additionalFee(BigDecimal.ZERO)
+                .additionalTotal(BigDecimal.ZERO)
+                .additionalPaymentStatus(AdditionalPaymentStatus.NONE)
+                .build();
+
+        Payment savedPayment = paymentRepository.save(payment);
+        saved.setPayment(savedPayment);
+
+        return ProductRequestResponseDto.fromEntity(saved, savedPayment);
     }
 
     @Transactional(readOnly = true)
@@ -124,6 +157,20 @@ public class ProductRequestService {
         existing.setInstructions(updateDto.getInstructions());
 
         ProductRequest updated = productRequestRepository.saveAndFlush(existing);
+
+        // Update payment cost if payment exists and is pending
+        Payment payment = paymentRepository.findByRequestId(updated.getId()).orElse(null);
+        if (payment != null && payment.getStatus() == PaymentStatus.PENDING) {
+            BigDecimal cost = updated.getBudget() != null ? updated.getBudget() : BigDecimal.ZERO;
+            BigDecimal deliveryFee = new BigDecimal("30.00");
+            BigDecimal gatewayFee = cost.multiply(new BigDecimal("0.0139")).setScale(2, RoundingMode.HALF_UP);
+            payment.setProductCost(cost);
+            payment.setGatewayFee(gatewayFee);
+            payment.setTotal(cost.add(deliveryFee).add(gatewayFee));
+            paymentRepository.save(payment);
+            updated.setPayment(payment);
+        }
+
         return ProductRequestResponseDto.fromEntity(updated);
     }
 
@@ -232,6 +279,14 @@ public class ProductRequestService {
 
         validateStatusTransition(existing.getStatus(), updateDto.getStatus());
 
+        // Block partner from advancing to COLLECTED if partner requested price increase and customer hasn't submitted yet
+        if (updateDto.getStatus() == RequestStatus.COLLECTED) {
+            Payment payment = paymentRepository.findByRequestId(existing.getId()).orElse(null);
+            if (payment != null && payment.getAdditionalPaymentStatus() == AdditionalPaymentStatus.REQUESTED) {
+                throw new BadRequestException("Cannot collect product: awaiting customer payment for the requested price increase (৳" + payment.getAdditionalTotal() + "). Please wait until the customer submits remaining payment.");
+            }
+        }
+
         existing.setStatus(updateDto.getStatus());
         ProductRequest updated = productRequestRepository.saveAndFlush(existing);
 
@@ -243,20 +298,135 @@ public class ProductRequestService {
         statusUpdateRepository.save(update);
 
         if (updateDto.getStatus() == RequestStatus.DELIVERED) {
-            BigDecimal cost = updated.getBudget() != null ? updated.getBudget() : BigDecimal.ZERO;
-            BigDecimal fee = new BigDecimal("50.00"); // Standard delivery fee placeholder
-
-            Payment payment = Payment.builder()
-                    .request(updated)
-                    .productCost(cost)
-                    .deliveryFee(fee)
-                    .total(cost.add(fee))
-                    .status(PaymentStatus.SIMULATED_PAID)
-                    .build();
-            paymentRepository.save(payment);
+            Payment payment = paymentRepository.findByRequestId(updated.getId()).orElse(null);
+            if (payment == null) {
+                BigDecimal cost = updated.getBudget() != null ? updated.getBudget() : BigDecimal.ZERO;
+                BigDecimal fee = new BigDecimal("30.00");
+                BigDecimal gatewayFee = cost.multiply(new BigDecimal("0.0139")).setScale(2, RoundingMode.HALF_UP);
+                payment = Payment.builder()
+                        .request(updated)
+                        .productCost(cost)
+                        .deliveryFee(fee)
+                        .gatewayFee(gatewayFee)
+                        .total(cost.add(fee).add(gatewayFee))
+                        .status(PaymentStatus.SIMULATED_PAID)
+                        .build();
+                paymentRepository.save(payment);
+                updated.setPayment(payment);
+            } else if (payment.getStatus() == PaymentStatus.PENDING) {
+                payment.setStatus(PaymentStatus.SIMULATED_PAID);
+                paymentRepository.save(payment);
+            }
         }
 
         return ProductRequestResponseDto.fromEntity(updated);
+    }
+
+    @Transactional
+    public PaymentResponseDto requestAdditionalPayment(Long id, NeedMorePaymentDto dto, UserDetailsImpl currentUser) {
+        ProductRequest existing = productRequestRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Request not found with id: " + id));
+
+        if (existing.getMatchedTrip() == null || !existing.getMatchedTrip().getPartner().getId().equals(currentUser.getId())) {
+            throw new ForbiddenException("Only the assigned partner can request price adjustment.");
+        }
+
+        if (existing.getStatus() != RequestStatus.ACCEPTED) {
+            throw new BadRequestException("Price adjustment can only be requested while the order is in ACCEPTED status (before collection). Current status: " + existing.getStatus());
+        }
+
+        Payment payment = paymentRepository.findByRequestId(id)
+                .orElseGet(() -> {
+                    BigDecimal cost = existing.getBudget() != null ? existing.getBudget() : BigDecimal.ZERO;
+                    BigDecimal deliveryFee = new BigDecimal("30.00");
+                    BigDecimal gatewayFee = cost.multiply(new BigDecimal("0.0139")).setScale(2, RoundingMode.HALF_UP);
+                    return Payment.builder()
+                            .request(existing)
+                            .productCost(cost)
+                            .deliveryFee(deliveryFee)
+                            .gatewayFee(gatewayFee)
+                            .total(cost.add(deliveryFee).add(gatewayFee))
+                            .status(PaymentStatus.PENDING)
+                            .build();
+                });
+
+        BigDecimal additionalAmount = dto.getAdditionalAmount().setScale(2, RoundingMode.HALF_UP);
+        // Formula: additional_amount + (additional_amount * 13.90 / 1000)
+        BigDecimal additionalFee = additionalAmount.multiply(new BigDecimal("0.0139")).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal additionalTotal = additionalAmount.add(additionalFee);
+
+        payment.setAdditionalAmount(additionalAmount);
+        payment.setAdditionalFee(additionalFee);
+        payment.setAdditionalTotal(additionalTotal);
+        payment.setNeedMoreReason(dto.getReason());
+        payment.setAdditionalPaymentStatus(AdditionalPaymentStatus.REQUESTED);
+
+        Payment saved = paymentRepository.save(payment);
+        existing.setPayment(saved);
+
+        StatusUpdate update = StatusUpdate.builder()
+                .request(existing)
+                .status(existing.getStatus().name())
+                .note(String.format("Partner requested ৳%s additional product cost (MFS Fee: ৳%s, Total remaining: ৳%s). Reason: %s",
+                        additionalAmount, additionalFee, additionalTotal, dto.getReason()))
+                .build();
+        statusUpdateRepository.save(update);
+
+        return PaymentResponseDto.fromEntity(saved);
+    }
+
+    @Transactional
+    public PaymentResponseDto submitAdditionalPayment(Long id, SubmitAdditionalPaymentDto dto, UserDetailsImpl currentUser) {
+        ProductRequest existing = productRequestRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Request not found with id: " + id));
+
+        if (!existing.getCustomer().getId().equals(currentUser.getId())) {
+            throw new ForbiddenException("Only the customer can submit the additional payment.");
+        }
+
+        Payment payment = paymentRepository.findByRequestId(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found for this request"));
+
+        if (payment.getAdditionalPaymentStatus() != AdditionalPaymentStatus.REQUESTED) {
+            throw new BadRequestException("No price adjustment is currently requested for this order.");
+        }
+
+        payment.setAdditionalPaymentMethod(dto.getPaymentMethod());
+        payment.setAdditionalSenderPhone(dto.getSenderPhone());
+        payment.setAdditionalTrxId(dto.getTrxId());
+        payment.setAdditionalPaymentStatus(AdditionalPaymentStatus.SUBMITTED);
+
+        Payment saved = paymentRepository.save(payment);
+        existing.setPayment(saved);
+
+        StatusUpdate update = StatusUpdate.builder()
+                .request(existing)
+                .status(existing.getStatus().name())
+                .note(String.format("Customer submitted remaining payment of ৳%s via %s (Phone: %s, TrxID: %s)",
+                        payment.getAdditionalTotal(), dto.getPaymentMethod(), dto.getSenderPhone(), dto.getTrxId()))
+                .build();
+        statusUpdateRepository.save(update);
+
+        return PaymentResponseDto.fromEntity(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public PaymentResponseDto getPaymentByRequestId(Long id, UserDetailsImpl currentUser) {
+        ProductRequest existing = productRequestRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Request not found with id: " + id));
+
+        boolean isCustomer = existing.getCustomer().getId().equals(currentUser.getId());
+        boolean isPartner = existing.getMatchedTrip() != null && existing.getMatchedTrip().getPartner().getId().equals(currentUser.getId());
+        boolean isAdmin = Boolean.TRUE.equals(currentUser.getIsAdmin());
+
+        if (!isCustomer && !isPartner && !isAdmin) {
+            throw new ForbiddenException("You do not have permission to view payment details for this request");
+        }
+
+        Payment payment = paymentRepository.findByRequestId(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found for request id: " + id));
+
+        return PaymentResponseDto.fromEntity(payment);
     }
 
     private void validateStatusTransition(RequestStatus current, RequestStatus target) {

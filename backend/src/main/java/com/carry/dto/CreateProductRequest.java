@@ -1,6 +1,7 @@
 package com.carry.dto;
 
 import com.carry.entity.LocationArea;
+import com.carry.entity.PaymentMethod;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -36,4 +37,9 @@ public class CreateProductRequest {
     private BigDecimal budget;
 
     private String instructions;
+
+    // Upfront MFS Payment details (Optional for backward compatibility, but used for bKash/Nagad)
+    private PaymentMethod paymentMethod;
+    private String senderPhone;
+    private String trxId;
 }
