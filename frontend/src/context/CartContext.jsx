@@ -7,6 +7,7 @@ export function CartProvider({ children }) {
   // Items array: [{ product, quantity }]
   const [items, setItems] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [cartStep, setCartStep] = useState('CART'); // 'CART' | 'CHECKOUT'
 
   // Add product to cart (or increase quantity if already present)
   const addToCart = (product, quantity = 1) => {
@@ -51,33 +52,56 @@ export function CartProvider({ children }) {
   // Clear all items in cart
   const clearCart = () => {
     setItems([]);
+    setCartStep('CART');
   };
 
-  const openCart = () => setIsCartOpen(true);
-  const closeCart = () => setIsCartOpen(false);
+  const openCart = () => {
+    setCartStep('CART');
+    setIsCartOpen(true);
+  };
+
+  const openCheckout = () => {
+    setCartStep('CHECKOUT');
+    setIsCartOpen(true);
+  };
+
+  const closeCart = () => {
+    setIsCartOpen(false);
+  };
+
   const toggleCart = () => setIsCartOpen((prev) => !prev);
 
-  // Calculations
-  const { totalCount, estimatedProductTotal, estimatedDeliveryTotal, estimatedGrandTotal } =
-    useMemo(() => {
-      let count = 0;
-      let productTotal = 0;
-      let deliveryTotal = 0;
+  // Calculations: matching formula
+  // need payment = productPrice + deliveryFee + gatewayFee (13.90 / 1000 = 1.39%)
+  const {
+    totalCount,
+    estimatedProductTotal,
+    estimatedDeliveryTotal,
+    gatewayFee,
+    grandTotalWithMfs,
+  } = useMemo(() => {
+    let count = 0;
+    let productTotal = 0;
+    let deliveryTotal = 0;
 
-      items.forEach(({ product, quantity }) => {
-        count += quantity;
-        const price = parseFloat(product.estimatedPrice) || 0;
-        productTotal += price * quantity;
-        deliveryTotal += calculateEstimatedDeliveryCharge(product, quantity);
-      });
+    items.forEach(({ product, quantity }) => {
+      count += quantity;
+      const price = parseFloat(product.estimatedPrice) || 0;
+      productTotal += price * quantity;
+      deliveryTotal += calculateEstimatedDeliveryCharge(product, quantity);
+    });
 
-      return {
-        totalCount: count,
-        estimatedProductTotal: productTotal,
-        estimatedDeliveryTotal: deliveryTotal,
-        estimatedGrandTotal: productTotal + deliveryTotal,
-      };
-    }, [items]);
+    const mfs = Math.round(productTotal * 0.0139 * 100) / 100;
+    const grand = Math.round((productTotal + deliveryTotal + mfs) * 100) / 100;
+
+    return {
+      totalCount: count,
+      estimatedProductTotal: productTotal,
+      estimatedDeliveryTotal: deliveryTotal,
+      gatewayFee: mfs,
+      grandTotalWithMfs: grand,
+    };
+  }, [items]);
 
   const value = {
     items,
@@ -87,12 +111,17 @@ export function CartProvider({ children }) {
     clearCart,
     isCartOpen,
     openCart,
+    openCheckout,
     closeCart,
     toggleCart,
+    cartStep,
+    setCartStep,
     totalCount,
     estimatedProductTotal,
     estimatedDeliveryTotal,
-    estimatedGrandTotal,
+    gatewayFee,
+    grandTotalWithMfs,
+    estimatedGrandTotal: grandTotalWithMfs,
   };
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

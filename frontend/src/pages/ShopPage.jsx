@@ -7,7 +7,7 @@ import Input from '../components/common/Input';
 import Card from '../components/common/Card';
 
 export default function ShopPage() {
-  const { addToCart, openCart, totalCount } = useCart();
+  const { addToCart, openCart, openCheckout, totalCount } = useCart();
 
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,6 +77,13 @@ export default function ShopPage() {
     // Reset local card quantity selector back to 1
     setQuantities((prev) => ({ ...prev, [product.id]: 1 }));
     openCart();
+  };
+
+  const handleBuyNow = (product) => {
+    const qty = quantities[product.id] || 1;
+    addToCart(product, qty);
+    setQuantities((prev) => ({ ...prev, [product.id]: 1 }));
+    openCheckout();
   };
 
   return (
@@ -242,13 +249,24 @@ export default function ShopPage() {
                       </button>
                     </div>
 
-                    <Button
-                      variant="primary"
-                      className="card-add-cart-btn"
-                      onClick={() => handleAddToCart(product)}
-                    >
-                      Add to Cart {cardQty > 1 && `(${cardQty})`}
-                    </Button>
+                    <div className="card-btn-group">
+                      <Button
+                        variant="outline"
+                        className="card-add-cart-btn"
+                        onClick={() => handleAddToCart(product)}
+                        title="Add to shopping cart"
+                      >
+                        🛒 Add {cardQty > 1 && `(${cardQty})`}
+                      </Button>
+                      <Button
+                        variant="primary"
+                        className="card-buy-now-btn"
+                        onClick={() => handleBuyNow(product)}
+                        title="Pay and Order immediately"
+                      >
+                        ⚡ Order Now
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
