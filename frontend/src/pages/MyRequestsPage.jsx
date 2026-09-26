@@ -92,7 +92,6 @@ export default function MyRequestsPage() {
                     <span className="request-card__category">{req.category}</span>
                   )}
                 </div>
-                {/* StatusBadge Component from Phase 7 */}
                 <StatusBadge status={req.status} size="md" />
               </div>
 
@@ -111,16 +110,40 @@ export default function MyRequestsPage() {
                     {req.budget != null ? `৳${parseFloat(req.budget).toFixed(2)}` : 'N/A'}
                   </span>
                 </div>
-                <div className="meta-item">
-                  <span className="meta-label">Requested On:</span>
-                  <span className="meta-val">
-                    {req.createdAt ? new Date(req.createdAt).toLocaleDateString() : 'N/A'}
-                  </span>
-                </div>
+                {req.payment ? (
+                  <div className="meta-item">
+                    <span className="meta-label">Total Payment:</span>
+                    <span className="meta-val" style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
+                      ৳{parseFloat(req.payment.total).toFixed(2)} ({req.payment.status})
+                    </span>
+                  </div>
+                ) : (
+                  <div className="meta-item">
+                    <span className="meta-label">Requested On:</span>
+                    <span className="meta-val">
+                      {req.createdAt ? new Date(req.createdAt).toLocaleDateString() : 'N/A'}
+                    </span>
+                  </div>
+                )}
               </div>
 
+              {req.payment?.additionalPaymentStatus === 'REQUESTED' && (
+                <div style={{
+                  margin: '0.75rem 0 0.5rem 0',
+                  padding: '0.5rem 0.75rem',
+                  background: '#fffbeb',
+                  border: '1px solid #fde68a',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.85rem',
+                  color: '#92400e',
+                  fontWeight: 600
+                }}>
+                  ⚠️ Payment Action Required: Partner requested ৳{parseFloat(req.payment.additionalAmount).toFixed(2)} extra (Remaining to pay: ৳{parseFloat(req.payment.additionalTotal).toFixed(2)}). Click details below to fulfill.
+                </div>
+              )}
+
               {req.preferredShop && (
-                <div className="request-card__sub-detail">
+                <div className="request-card__sub-detail" style={{ marginTop: '0.5rem' }}>
                   <strong>Shop:</strong> {req.preferredShop}
                 </div>
               )}
@@ -128,7 +151,7 @@ export default function MyRequestsPage() {
               <div className="request-card__footer">
                 <Link to={`/requests/${req.id}`}>
                   <Button variant="outline" size="sm">
-                    View Timeline & Details →
+                    View Details & Payment →
                   </Button>
                 </Link>
               </div>
