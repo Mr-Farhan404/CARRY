@@ -1,6 +1,7 @@
 package com.carry.dto;
 
 import com.carry.entity.LocationArea;
+import com.carry.entity.OrderType;
 import com.carry.entity.Payment;
 import com.carry.entity.ProductRequest;
 import com.carry.entity.RequestStatus;
@@ -19,6 +20,11 @@ import java.time.LocalDateTime;
 public class ProductRequestResponseDto {
 
     private Long id;
+    private OrderType orderType;
+    private Long productId;
+    private BigDecimal unitPriceSnapshot;
+    private BigDecimal deliveryCharge;
+
     private Long customerId;
     private String customerName;
     private String productName;
@@ -40,8 +46,13 @@ public class ProductRequestResponseDto {
     }
 
     public static ProductRequestResponseDto fromEntity(ProductRequest request, Payment payment) {
+        if (request == null) return null;
         return ProductRequestResponseDto.builder()
                 .id(request.getId())
+                .orderType(request.getOrderType() != null ? request.getOrderType() : OrderType.MANUAL)
+                .productId(request.getProduct() != null ? request.getProduct().getId() : null)
+                .unitPriceSnapshot(request.getUnitPriceSnapshot())
+                .deliveryCharge(request.getDeliveryCharge())
                 .customerId(request.getCustomer() != null ? request.getCustomer().getId() : null)
                 .customerName(request.getCustomer() != null ? request.getCustomer().getFullName() : null)
                 .productName(request.getProductName())

@@ -61,6 +61,7 @@ public class SecurityConfig {
                 auth.requestMatchers("/api/auth/**").permitAll()
                     .requestMatchers("/api/health").permitAll()
                     .requestMatchers("/api/meta/**").permitAll()
+                    .requestMatchers("/api/products/**").permitAll()
                     .requestMatchers("/api/admin/**").hasRole("ADMIN")
                     .anyRequest().authenticated()
             )

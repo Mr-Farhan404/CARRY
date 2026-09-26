@@ -1,10 +1,10 @@
 package com.carry.dto;
 
 import com.carry.entity.LocationArea;
+import com.carry.entity.OrderType;
 import com.carry.entity.PaymentMethod;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -19,7 +19,9 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class CreateProductRequest {
 
-    @NotBlank(message = "Product name is required")
+    private OrderType orderType;
+    private Long productId;
+
     private String productName;
 
     private String category;

@@ -1,16 +1,13 @@
 package com.carry.controller;
 
-import com.carry.dto.AdminVerifyPaymentDto;
-import com.carry.dto.ComplaintResponseDto;
-import com.carry.dto.PaymentResponseDto;
-import com.carry.dto.ProductRequestResponseDto;
-import com.carry.dto.UpdateComplaintStatusDto;
-import com.carry.dto.UserDto;
+import com.carry.dto.*;
 import com.carry.entity.RequestStatus;
 import com.carry.security.UserDetailsImpl;
 import com.carry.service.AdminService;
+import com.carry.service.ProductService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +20,7 @@ import java.util.List;
 public class AdminController {
 
     private final AdminService adminService;
+    private final ProductService productService;
 
     @GetMapping("/complaints")
     public ResponseEntity<List<ComplaintResponseDto>> getComplaints(
@@ -63,5 +61,42 @@ public class AdminController {
             @RequestBody AdminVerifyPaymentDto dto,
             @AuthenticationPrincipal UserDetailsImpl currentUser) {
         return ResponseEntity.ok(adminService.verifyPayment(id, dto, currentUser));
+    }
+
+    // Admin Product Catalog Management
+    @GetMapping("/products")
+    public ResponseEntity<List<ProductResponseDto>> getAllProducts(
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        return ResponseEntity.ok(productService.getAllProductsForAdmin(currentUser));
+    }
+
+    @PostMapping("/products")
+    public ResponseEntity<ProductResponseDto> createProduct(
+            @Valid @RequestBody CreateProductDto dto,
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        return new ResponseEntity<>(productService.createProduct(dto, currentUser), HttpStatus.CREATED);
+    }
+
+    @PutMapping("/products/{id}")
+    public ResponseEntity<ProductResponseDto> updateProduct(
+            @PathVariable Long id,
+            @RequestBody UpdateProductDto dto,
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        return ResponseEntity.ok(productService.updateProduct(id, dto, currentUser));
+    }
+
+    @PatchMapping("/products/{id}/status")
+    public ResponseEntity<ProductResponseDto> toggleProductStatus(
+            @PathVariable Long id,
+            @RequestParam(required = false) Boolean isActive,
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        return ResponseEntity.ok(productService.toggleProductActive(id, isActive, currentUser));
+    }
+
+    @PutMapping("/products/{id}/deactivate")
+    public ResponseEntity<ProductResponseDto> deactivateProduct(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        return ResponseEntity.ok(productService.toggleProductActive(id, false, currentUser));
     }
 }

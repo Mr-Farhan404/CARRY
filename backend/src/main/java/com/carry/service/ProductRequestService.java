@@ -11,8 +11,10 @@ import com.carry.dto.UpdateProductRequest;
 import com.carry.dto.UpdateRequestStatusDto;
 import com.carry.entity.AdditionalPaymentStatus;
 import com.carry.entity.LocationArea;
+import com.carry.entity.OrderType;
 import com.carry.entity.Payment;
 import com.carry.entity.PaymentStatus;
+import com.carry.entity.Product;
 import com.carry.entity.ProductRequest;
 import com.carry.entity.RequestStatus;
 import com.carry.entity.StatusUpdate;
@@ -23,6 +25,7 @@ import com.carry.exception.BadRequestException;
 import com.carry.exception.ForbiddenException;
 import com.carry.exception.ResourceNotFoundException;
 import com.carry.repository.PaymentRepository;
+import com.carry.repository.ProductRepository;
 import com.carry.repository.ProductRequestRepository;
 import com.carry.repository.StatusUpdateRepository;
 import com.carry.repository.TripRepository;
@@ -47,29 +50,75 @@ public class ProductRequestService {
     private final TripRepository tripRepository;
     private final StatusUpdateRepository statusUpdateRepository;
     private final PaymentRepository paymentRepository;
+    private final ProductRepository productRepository;
+    private final DeliveryChargeService deliveryChargeService;
 
     @Transactional
     public ProductRequestResponseDto createRequest(CreateProductRequest request, UserDetailsImpl currentUser) {
         User customer = userRepository.findById(currentUser.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
+        OrderType orderType;
+        Product product = null;
+        BigDecimal unitPriceSnapshot = null;
+        BigDecimal deliveryFee;
+        BigDecimal cost;
+        BigDecimal budget;
+        String productName;
+        String category;
+        int quantity = (request.getQuantity() != null && request.getQuantity() >= 1) ? request.getQuantity() : 1;
+
+        if (request.getProductId() != null || request.getOrderType() == OrderType.CATALOG) {
+            if (request.getProductId() == null) {
+                throw new BadRequestException("Product ID is required for catalog orders");
+            }
+            product = productRepository.findById(request.getProductId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + request.getProductId()));
+
+            if (!Boolean.TRUE.equals(product.getIsActive())) {
+                throw new BadRequestException("Product is currently unavailable for order");
+            }
+
+            orderType = OrderType.CATALOG;
+            unitPriceSnapshot = product.getEstimatedPrice();
+            productName = (request.getProductName() != null && !request.getProductName().isBlank())
+                    ? request.getProductName().trim()
+                    : product.getName();
+            category = request.getCategory() != null ? request.getCategory() : product.getCategory().name();
+            deliveryFee = deliveryChargeService.calculateCatalogCharge(product, quantity);
+            cost = unitPriceSnapshot.multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP);
+            budget = request.getBudget() != null ? request.getBudget() : cost;
+        } else {
+            orderType = OrderType.MANUAL;
+            if (request.getProductName() == null || request.getProductName().isBlank()) {
+                throw new BadRequestException("Product name is required for manual requests");
+            }
+            productName = request.getProductName().trim();
+            category = request.getCategory();
+            deliveryFee = deliveryChargeService.getManualBaseCharge();
+            cost = request.getBudget() != null ? request.getBudget() : BigDecimal.ZERO;
+            budget = cost;
+        }
+
         ProductRequest productRequest = ProductRequest.builder()
                 .customer(customer)
-                .productName(request.getProductName())
-                .category(request.getCategory())
-                .quantity(request.getQuantity() != null ? request.getQuantity() : 1)
+                .orderType(orderType)
+                .product(product)
+                .unitPriceSnapshot(unitPriceSnapshot)
+                .deliveryCharge(deliveryFee)
+                .productName(productName)
+                .category(category)
+                .quantity(quantity)
                 .preferredShop(request.getPreferredShop())
                 .pickupArea(request.getPickupArea())
-                .budget(request.getBudget())
+                .budget(budget)
                 .instructions(request.getInstructions())
                 .status(RequestStatus.REQUESTED)
                 .build();
 
         ProductRequest saved = productRequestRepository.save(productRequest);
 
-        // Formula: The need payment = (product prize + product prize*(13.90/1000) + 30) taka
-        BigDecimal cost = request.getBudget() != null ? request.getBudget() : BigDecimal.ZERO;
-        BigDecimal deliveryFee = new BigDecimal("30.00");
+        // Formula: The need payment = (product cost + product cost * (13.90/1000) + delivery fee)
         BigDecimal gatewayFee = cost.multiply(new BigDecimal("0.0139")).setScale(2, RoundingMode.HALF_UP);
         BigDecimal total = cost.add(deliveryFee).add(gatewayFee);
 
@@ -150,6 +199,9 @@ public class ProductRequestService {
         existing.setCategory(updateDto.getCategory());
         if (updateDto.getQuantity() != null) {
             existing.setQuantity(updateDto.getQuantity());
+            if (existing.getOrderType() == OrderType.CATALOG && existing.getProduct() != null) {
+                existing.setDeliveryCharge(deliveryChargeService.calculateCatalogCharge(existing.getProduct(), updateDto.getQuantity()));
+            }
         }
         existing.setPreferredShop(updateDto.getPreferredShop());
         existing.setPickupArea(updateDto.getPickupArea());
@@ -161,10 +213,17 @@ public class ProductRequestService {
         // Update payment cost if payment exists and is pending
         Payment payment = paymentRepository.findByRequestId(updated.getId()).orElse(null);
         if (payment != null && payment.getStatus() == PaymentStatus.PENDING) {
-            BigDecimal cost = updated.getBudget() != null ? updated.getBudget() : BigDecimal.ZERO;
-            BigDecimal deliveryFee = new BigDecimal("30.00");
+            BigDecimal cost;
+            if (updated.getOrderType() == OrderType.CATALOG && updated.getUnitPriceSnapshot() != null) {
+                int qty = updated.getQuantity() != null ? updated.getQuantity() : 1;
+                cost = updated.getUnitPriceSnapshot().multiply(BigDecimal.valueOf(qty));
+            } else {
+                cost = updated.getBudget() != null ? updated.getBudget() : BigDecimal.ZERO;
+            }
+            BigDecimal deliveryFee = updated.getDeliveryCharge() != null ? updated.getDeliveryCharge() : deliveryChargeService.getManualBaseCharge();
             BigDecimal gatewayFee = cost.multiply(new BigDecimal("0.0139")).setScale(2, RoundingMode.HALF_UP);
             payment.setProductCost(cost);
+            payment.setDeliveryFee(deliveryFee);
             payment.setGatewayFee(gatewayFee);
             payment.setTotal(cost.add(deliveryFee).add(gatewayFee));
             paymentRepository.save(payment);
@@ -254,10 +313,8 @@ public class ProductRequestService {
         existing.setMatchedTrip(trip);
         existing.setStatus(RequestStatus.ACCEPTED);
         
-        // Optimistic locking handles concurrent saves correctly as version will be bumped
         ProductRequest updated = productRequestRepository.saveAndFlush(existing);
 
-        // create initial status update record
         StatusUpdate update = StatusUpdate.builder()
                 .request(updated)
                 .status(RequestStatus.ACCEPTED.name())
@@ -299,9 +356,17 @@ public class ProductRequestService {
 
         if (updateDto.getStatus() == RequestStatus.DELIVERED) {
             Payment payment = paymentRepository.findByRequestId(updated.getId()).orElse(null);
+            BigDecimal cost;
+            if (updated.getOrderType() == OrderType.CATALOG && updated.getUnitPriceSnapshot() != null) {
+                int qty = updated.getQuantity() != null ? updated.getQuantity() : 1;
+                cost = updated.getUnitPriceSnapshot().multiply(BigDecimal.valueOf(qty)).setScale(2, RoundingMode.HALF_UP);
+            } else {
+                cost = updated.getBudget() != null ? updated.getBudget() : BigDecimal.ZERO;
+            }
+
+            BigDecimal fee = updated.getDeliveryCharge() != null ? updated.getDeliveryCharge() : deliveryChargeService.getManualBaseCharge();
+
             if (payment == null) {
-                BigDecimal cost = updated.getBudget() != null ? updated.getBudget() : BigDecimal.ZERO;
-                BigDecimal fee = new BigDecimal("30.00");
                 BigDecimal gatewayFee = cost.multiply(new BigDecimal("0.0139")).setScale(2, RoundingMode.HALF_UP);
                 payment = Payment.builder()
                         .request(updated)
@@ -337,8 +402,14 @@ public class ProductRequestService {
 
         Payment payment = paymentRepository.findByRequestId(id)
                 .orElseGet(() -> {
-                    BigDecimal cost = existing.getBudget() != null ? existing.getBudget() : BigDecimal.ZERO;
-                    BigDecimal deliveryFee = new BigDecimal("30.00");
+                    BigDecimal cost;
+                    if (existing.getOrderType() == OrderType.CATALOG && existing.getUnitPriceSnapshot() != null) {
+                        int qty = existing.getQuantity() != null ? existing.getQuantity() : 1;
+                        cost = existing.getUnitPriceSnapshot().multiply(BigDecimal.valueOf(qty));
+                    } else {
+                        cost = existing.getBudget() != null ? existing.getBudget() : BigDecimal.ZERO;
+                    }
+                    BigDecimal deliveryFee = existing.getDeliveryCharge() != null ? existing.getDeliveryCharge() : deliveryChargeService.getManualBaseCharge();
                     BigDecimal gatewayFee = cost.multiply(new BigDecimal("0.0139")).setScale(2, RoundingMode.HALF_UP);
                     return Payment.builder()
                             .request(existing)
