@@ -67,11 +67,30 @@ export const metaApi = {
   getZones: () => request('/api/meta/zones', { method: 'GET' }),
 };
 
+export const productsApi = {
+  getActive: ({ category, search } = {}) => {
+    const params = new URLSearchParams();
+    if (category && category !== 'ALL') params.append('category', category);
+    if (search && search.trim()) params.append('search', search.trim());
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request(`/api/products${query}`, { method: 'GET' });
+  },
+
+  getById: (id) =>
+    request(`/api/products/${id}`, { method: 'GET' }),
+};
+
 export const requestsApi = {
   create: (requestData, token) =>
     request('/api/requests', {
       method: 'POST',
       body: JSON.stringify(requestData),
+    }, token),
+
+  checkout: (cartLines, token) =>
+    request('/api/requests/checkout', {
+      method: 'POST',
+      body: JSON.stringify(cartLines),
     }, token),
 
   getMyRequests: (token) =>
@@ -202,6 +221,33 @@ export const adminApi = {
     request(`/api/admin/payments/${id}/verify`, {
       method: 'PUT',
       body: JSON.stringify({ status, additionalPaymentStatus, adminNotes }),
+    }, token),
+
+  getProducts: (token) =>
+    request('/api/admin/products', {
+      method: 'GET',
+    }, token),
+
+  createProduct: (productData, token) =>
+    request('/api/admin/products', {
+      method: 'POST',
+      body: JSON.stringify(productData),
+    }, token),
+
+  updateProduct: (id, productData, token) =>
+    request(`/api/admin/products/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(productData),
+    }, token),
+
+  toggleProductStatus: (id, isActive, token) =>
+    request(`/api/admin/products/${id}/status?isActive=${isActive}`, {
+      method: 'PATCH',
+    }, token),
+
+  deactivateProduct: (id, token) =>
+    request(`/api/admin/products/${id}/deactivate`, {
+      method: 'PUT',
     }, token),
 };
 

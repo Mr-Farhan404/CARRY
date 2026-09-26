@@ -1,6 +1,7 @@
 package com.carry.controller;
 
 import com.carry.dto.AcceptRequestDto;
+import com.carry.dto.CheckoutLineDto;
 import com.carry.dto.CreateProductRequest;
 import com.carry.dto.NeedMorePaymentDto;
 import com.carry.dto.PaymentResponseDto;
@@ -9,8 +10,12 @@ import com.carry.dto.StatusUpdateResponseDto;
 import com.carry.dto.SubmitAdditionalPaymentDto;
 import com.carry.dto.UpdateProductRequest;
 import com.carry.dto.UpdateRequestStatusDto;
+import com.carry.exception.BadRequestException;
 import com.carry.security.UserDetailsImpl;
 import com.carry.service.ProductRequestService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -18,6 +23,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -26,6 +32,26 @@ import java.util.List;
 public class ProductRequestController {
 
     private final ProductRequestService productRequestService;
+    private final ObjectMapper objectMapper;
+
+    @PostMapping("/checkout")
+    public ResponseEntity<List<ProductRequestResponseDto>> checkout(
+            @RequestBody JsonNode payload,
+            @AuthenticationPrincipal UserDetailsImpl currentUser) throws JsonProcessingException {
+        List<CheckoutLineDto> lines = new ArrayList<>();
+        if (payload != null && payload.isArray()) {
+            for (JsonNode node : payload) {
+                lines.add(objectMapper.treeToValue(node, CheckoutLineDto.class));
+            }
+        } else if (payload != null && payload.isObject() && payload.has("items") && payload.get("items").isArray()) {
+            for (JsonNode node : payload.get("items")) {
+                lines.add(objectMapper.treeToValue(node, CheckoutLineDto.class));
+            }
+        } else {
+            throw new BadRequestException("Invalid checkout payload format. Expected list of cart lines.");
+        }
+        return new ResponseEntity<>(productRequestService.checkout(lines, currentUser), HttpStatus.CREATED);
+    }
 
     @PostMapping
     public ResponseEntity<ProductRequestResponseDto> createRequest(

@@ -1,6 +1,7 @@
 package com.carry.service;
 
 import com.carry.dto.AcceptRequestDto;
+import com.carry.dto.CheckoutLineDto;
 import com.carry.dto.CreateProductRequest;
 import com.carry.dto.NeedMorePaymentDto;
 import com.carry.dto.PaymentResponseDto;
@@ -15,6 +16,7 @@ import com.carry.entity.OrderType;
 import com.carry.entity.Payment;
 import com.carry.entity.PaymentStatus;
 import com.carry.entity.Product;
+import com.carry.entity.ProductCategory;
 import com.carry.entity.ProductRequest;
 import com.carry.entity.RequestStatus;
 import com.carry.entity.StatusUpdate;
@@ -38,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -144,6 +147,106 @@ public class ProductRequestService {
         saved.setPayment(savedPayment);
 
         return ProductRequestResponseDto.fromEntity(saved, savedPayment);
+    }
+
+    @Transactional
+    public List<ProductRequestResponseDto> checkout(List<CheckoutLineDto> lines, UserDetailsImpl currentUser) {
+        if (lines == null || lines.isEmpty()) {
+            throw new BadRequestException("Checkout failed: cart is empty");
+        }
+
+        User customer = userRepository.findById(currentUser.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        // Phase 1: Validate all lines before creating or saving anything
+        List<Product> products = new ArrayList<>(lines.size());
+        for (int i = 0; i < lines.size(); i++) {
+            CheckoutLineDto line = lines.get(i);
+            int lineNum = i + 1;
+
+            if (line == null || line.getProductId() == null) {
+                throw new BadRequestException("Line " + lineNum + ": Product ID is required");
+            }
+
+            if (line.getQuantity() != null && line.getQuantity() < 1) {
+                throw new BadRequestException("Line " + lineNum + ": Quantity must be at least 1");
+            }
+
+            Product product = productRepository.findById(line.getProductId())
+                    .orElseThrow(() -> new BadRequestException("Line " + lineNum + ": Product not found with ID " + line.getProductId()));
+
+            if (!Boolean.TRUE.equals(product.getIsActive())) {
+                throw new BadRequestException("Line " + lineNum + ": Product '" + product.getName() + "' is inactive and unavailable for order");
+            }
+
+            products.add(product);
+        }
+
+        // Phase 2: Create requests and initial payments
+        List<ProductRequestResponseDto> createdRequests = new ArrayList<>(lines.size());
+        for (int i = 0; i < lines.size(); i++) {
+            CheckoutLineDto line = lines.get(i);
+            Product product = products.get(i);
+            int quantity = (line.getQuantity() != null && line.getQuantity() >= 1) ? line.getQuantity() : 1;
+
+            BigDecimal unitPriceSnapshot = product.getEstimatedPrice();
+            BigDecimal deliveryFee = deliveryChargeService.calculateCatalogCharge(product, quantity);
+            BigDecimal cost = unitPriceSnapshot.multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP);
+
+            LocationArea pickupArea = line.getPickupArea();
+            if (pickupArea == null) {
+                pickupArea = (product.getCategory() == ProductCategory.ELECTRONICS)
+                        ? LocationArea.ELECTRONICS_MARKET
+                        : LocationArea.NEW_MARKET;
+            }
+
+            ProductRequest productRequest = ProductRequest.builder()
+                    .customer(customer)
+                    .orderType(OrderType.CATALOG)
+                    .product(product)
+                    .unitPriceSnapshot(unitPriceSnapshot)
+                    .deliveryCharge(deliveryFee)
+                    .productName(product.getName())
+                    .category(product.getCategory().name())
+                    .quantity(quantity)
+                    .preferredShop(line.getPreferredShop())
+                    .pickupArea(pickupArea)
+                    .budget(cost)
+                    .instructions(line.getInstructions())
+                    .status(RequestStatus.REQUESTED)
+                    .build();
+
+            ProductRequest saved = productRequestRepository.save(productRequest);
+
+            // Formula: The need payment = (product cost + product cost * (13.90/1000) + delivery fee)
+            BigDecimal gatewayFee = cost.multiply(new BigDecimal("0.0139")).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal total = cost.add(deliveryFee).add(gatewayFee);
+
+            PaymentStatus initialStatus = line.getPaymentMethod() != null ? PaymentStatus.SUBMITTED : PaymentStatus.PENDING;
+
+            Payment payment = Payment.builder()
+                    .request(saved)
+                    .productCost(cost)
+                    .deliveryFee(deliveryFee)
+                    .gatewayFee(gatewayFee)
+                    .total(total)
+                    .status(initialStatus)
+                    .paymentMethod(line.getPaymentMethod())
+                    .senderPhone(line.getSenderPhone())
+                    .trxId(line.getTrxId())
+                    .additionalAmount(BigDecimal.ZERO)
+                    .additionalFee(BigDecimal.ZERO)
+                    .additionalTotal(BigDecimal.ZERO)
+                    .additionalPaymentStatus(AdditionalPaymentStatus.NONE)
+                    .build();
+
+            Payment savedPayment = paymentRepository.save(payment);
+            saved.setPayment(savedPayment);
+
+            createdRequests.add(ProductRequestResponseDto.fromEntity(saved, savedPayment));
+        }
+
+        return createdRequests;
     }
 
     @Transactional(readOnly = true)

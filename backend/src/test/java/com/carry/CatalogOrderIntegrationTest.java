@@ -1,5 +1,6 @@
 package com.carry;
 
+import com.carry.dto.CheckoutLineDto;
 import com.carry.dto.CreateProductDto;
 import com.carry.dto.CreateProductRequest;
 import com.carry.dto.ProductRequestResponseDto;
@@ -21,6 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -316,5 +318,83 @@ class CatalogOrderIntegrationTest {
 
         Product inDb = productRepository.findById(createdProduct.getId()).orElseThrow();
         assertEquals(false, inDb.getIsActive());
+    }
+
+    @Test
+    void testCheckoutValidTwoLinesCreatesRequests() throws Exception {
+        Product arduino = productRepository.save(Product.builder()
+                .name("Arduino Uno R3")
+                .category(ProductCategory.ELECTRONICS)
+                .estimatedPrice(new BigDecimal("850.00"))
+                .weightClass(WeightClass.LIGHT)
+                .sizeClass(SizeClass.SMALL)
+                .isSensitive(true)
+                .isActive(true)
+                .build());
+
+        List<CheckoutLineDto> lines = List.of(
+                CheckoutLineDto.builder()
+                        .productId(activeBiryani.getId())
+                        .quantity(2)
+                        .pickupArea(LocationArea.NEW_MARKET)
+                        .instructions("Extra spicy")
+                        .build(),
+                CheckoutLineDto.builder()
+                        .productId(arduino.getId())
+                        .quantity(1)
+                        .pickupArea(LocationArea.ELECTRONICS_MARKET)
+                        .instructions("Handle with care")
+                        .build()
+        );
+
+        // Biryani (Medium/Medium/non-sensitive): Base 30 + 15 + 10 = 55. Qty 2 -> 55 + 10 = 65.00 delivery fee.
+        // Arduino (Light/Small/sensitive): Base 30 + 0 + 0 + 20 = 50.00 delivery fee.
+        mockMvc.perform(post("/api/requests/checkout")
+                        .header("Authorization", "Bearer " + customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(lines)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].orderType").value("CATALOG"))
+                .andExpect(jsonPath("$[0].productId").value(activeBiryani.getId()))
+                .andExpect(jsonPath("$[0].unitPriceSnapshot").value(320.00))
+                .andExpect(jsonPath("$[0].deliveryCharge").value(65.00))
+                .andExpect(jsonPath("$[0].quantity").value(2))
+                .andExpect(jsonPath("$[0].status").value("REQUESTED"))
+                .andExpect(jsonPath("$[1].orderType").value("CATALOG"))
+                .andExpect(jsonPath("$[1].productId").value(arduino.getId()))
+                .andExpect(jsonPath("$[1].unitPriceSnapshot").value(850.00))
+                .andExpect(jsonPath("$[1].deliveryCharge").value(50.00))
+                .andExpect(jsonPath("$[1].quantity").value(1))
+                .andExpect(jsonPath("$[1].status").value("REQUESTED"));
+
+        assertEquals(2, productRequestRepository.count());
+    }
+
+    @Test
+    void testCheckoutWithInactiveProductFailsAndCreatesNothing() throws Exception {
+        long initialCount = productRequestRepository.count();
+
+        List<CheckoutLineDto> lines = List.of(
+                CheckoutLineDto.builder()
+                        .productId(activeBiryani.getId())
+                        .quantity(1)
+                        .build(),
+                CheckoutLineDto.builder()
+                        .productId(inactiveProduct.getId())
+                        .quantity(1)
+                        .build()
+        );
+
+        mockMvc.perform(post("/api/requests/checkout")
+                        .header("Authorization", "Bearer " + customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(lines)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("Line 2")))
+                .andExpect(jsonPath("$.message", containsString("inactive")));
+
+        // Atomic transaction: line 1 must NOT have been persisted
+        assertEquals(initialCount, productRequestRepository.count());
     }
 }

@@ -17,6 +17,7 @@ export default function AdminPage() {
   const [requests, setRequests] = useState([]);
   const [users, setUsers] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [products, setProducts] = useState([]);
 
   // Loading & error states
   const [isLoading, setIsLoading] = useState(true);
@@ -50,6 +51,27 @@ export default function AdminPage() {
   const [paymentActionError, setPaymentActionError] = useState(null);
   const [paymentActionSuccess, setPaymentActionSuccess] = useState(null);
 
+  // Products filter & modal state
+  const [productSearch, setProductSearch] = useState('');
+  const [productCategoryFilter, setProductCategoryFilter] = useState('ALL');
+  const [productActiveFilter, setProductActiveFilter] = useState('ALL');
+  const [productModalOpen, setProductModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [productModalError, setProductModalError] = useState(null);
+  const [productModalSuccess, setProductModalSuccess] = useState(null);
+  const [productForm, setProductForm] = useState({
+    name: '',
+    category: 'FOOD',
+    description: '',
+    imageUrl: '',
+    estimatedPrice: '',
+    weightClass: 'LIGHT',
+    sizeClass: 'SMALL',
+    isSensitive: false,
+    isActive: true,
+  });
+
   // Load all admin data
   const loadAdminData = async (silent = false) => {
     if (!silent) setIsLoading(true);
@@ -57,17 +79,19 @@ export default function AdminPage() {
     setError(null);
 
     try {
-      const [complaintsData, requestsData, usersData, paymentsData] = await Promise.all([
+      const [complaintsData, requestsData, usersData, paymentsData, productsData] = await Promise.all([
         adminApi.getComplaints(token),
         adminApi.getRequests('ALL', token),
         adminApi.getUsers(token),
         adminApi.getPayments(token),
+        adminApi.getProducts(token),
       ]);
 
       setComplaints(complaintsData || []);
       setRequests(requestsData || []);
       setUsers(usersData || []);
       setPayments(paymentsData || []);
+      setProducts(productsData || []);
     } catch (err) {
       console.error('Failed to load admin data:', err);
       setError(err.message || 'Failed to fetch administrative data');
@@ -199,6 +223,127 @@ export default function AdminPage() {
       setIsVerifyingPayment(false);
     }
   };
+
+  // Open modal to create a new product
+  const handleOpenCreateProduct = () => {
+    setEditingProduct(null);
+    setProductForm({
+      name: '',
+      category: 'FOOD',
+      description: '',
+      imageUrl: '',
+      estimatedPrice: '',
+      weightClass: 'LIGHT',
+      sizeClass: 'SMALL',
+      isSensitive: false,
+      isActive: true,
+    });
+    setProductModalError(null);
+    setProductModalSuccess(null);
+    setProductModalOpen(true);
+  };
+
+  // Open modal to edit an existing product
+  const handleOpenEditProduct = (product) => {
+    setEditingProduct(product);
+    setProductForm({
+      name: product.name || '',
+      category: product.category || 'FOOD',
+      description: product.description || '',
+      imageUrl: product.imageUrl || '',
+      estimatedPrice: product.estimatedPrice != null ? String(product.estimatedPrice) : '',
+      weightClass: product.weightClass || 'LIGHT',
+      sizeClass: product.sizeClass || 'SMALL',
+      isSensitive: Boolean(product.isSensitive),
+      isActive: Boolean(product.isActive),
+    });
+    setProductModalError(null);
+    setProductModalSuccess(null);
+    setProductModalOpen(true);
+  };
+
+  // Save product (create or update)
+  const handleSaveProduct = async (e) => {
+    e.preventDefault();
+    if (!productForm.name.trim()) {
+      setProductModalError('Product name is required');
+      return;
+    }
+    const priceNum = parseFloat(productForm.estimatedPrice);
+    if (isNaN(priceNum) || priceNum < 0) {
+      setProductModalError('Please enter a valid price (greater than or equal to 0)');
+      return;
+    }
+
+    setIsSavingProduct(true);
+    setProductModalError(null);
+    setProductModalSuccess(null);
+
+    const payload = {
+      name: productForm.name.trim(),
+      category: productForm.category,
+      description: productForm.description.trim() || null,
+      imageUrl: productForm.imageUrl.trim() || null,
+      estimatedPrice: priceNum,
+      weightClass: productForm.weightClass,
+      sizeClass: productForm.sizeClass,
+      isSensitive: productForm.isSensitive,
+      isActive: productForm.isActive,
+    };
+
+    try {
+      if (editingProduct) {
+        const updated = await adminApi.updateProduct(editingProduct.id, payload, token);
+        setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        setProductModalSuccess(`Product "${updated.name}" updated successfully!`);
+      } else {
+        const created = await adminApi.createProduct(payload, token);
+        setProducts((prev) => [created, ...prev]);
+        setProductModalSuccess(`Product "${created.name}" created successfully!`);
+      }
+      setTimeout(() => {
+        setProductModalOpen(false);
+      }, 1000);
+    } catch (err) {
+      console.error('Failed to save product:', err);
+      setProductModalError(err.message || 'Failed to save product');
+    } finally {
+      setIsSavingProduct(false);
+    }
+  };
+
+  // Toggle active state
+  const handleToggleProductActive = async (product) => {
+    try {
+      const updated = await adminApi.toggleProductStatus(product.id, !product.isActive, token);
+      setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    } catch (err) {
+      console.error('Failed to toggle product status:', err);
+      alert(err.message || 'Failed to change product status');
+    }
+  };
+
+  // Filtered Products
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      const matchesCategory =
+        productCategoryFilter === 'ALL' || p.category === productCategoryFilter;
+
+      const matchesActive =
+        productActiveFilter === 'ALL' ||
+        (productActiveFilter === 'ACTIVE_ONLY' && p.isActive) ||
+        (productActiveFilter === 'INACTIVE_ONLY' && !p.isActive);
+
+      const q = productSearch.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        p.name?.toLowerCase().includes(q) ||
+        p.description?.toLowerCase().includes(q) ||
+        String(p.id).includes(q);
+
+      return matchesCategory && matchesActive && matchesSearch;
+    });
+  }, [products, productCategoryFilter, productActiveFilter, productSearch]);
 
   // Filtered Complaints
   const filteredComplaints = useMemo(() => {
@@ -339,6 +484,10 @@ export default function AdminPage() {
             </span>
           </div>
           <div className="admin-stat-item">
+            <span className="admin-stat-label">Catalog Products</span>
+            <span className="admin-stat-value">{products.length}</span>
+          </div>
+          <div className="admin-stat-item">
             <span className="admin-stat-label">Open Complaints</span>
             <span className={`admin-stat-value ${openComplaintsCount > 0 ? 'text-danger' : ''}`}>
               {openComplaintsCount}
@@ -355,6 +504,17 @@ export default function AdminPage() {
 
       {/* Navigation Tabs */}
       <div className="admin-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'products'}
+          className={`admin-tab ${activeTab === 'products' ? 'admin-tab--active' : ''}`}
+          onClick={() => setActiveTab('products')}
+        >
+          <span>📦 Catalog Products</span>
+          <span className="admin-tab-count">{products.length}</span>
+        </button>
+
         <button
           type="button"
           role="tab"
@@ -896,6 +1056,165 @@ export default function AdminPage() {
               )}
             </div>
           )}
+
+          {/* ============================================================ */}
+          {/* TAB 5: PRODUCTS CATALOG MANAGEMENT                           */}
+          {/* ============================================================ */}
+          {activeTab === 'products' && (
+            <div className="products-tab">
+              {/* Products Toolbar */}
+              <div className="admin-toolbar" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', flex: '1 1 500px', alignItems: 'center' }}>
+                  <div className="admin-search-box" style={{ flex: '1 1 250px' }}>
+                    <Input
+                      name="productSearch"
+                      placeholder="Search products by name, description, ID..."
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="admin-filter-group">
+                    <span className="admin-filter-label">Category:</span>
+                    <select
+                      className="ui-input ui-select ui-select--compact"
+                      value={productCategoryFilter}
+                      onChange={(e) => setProductCategoryFilter(e.target.value)}
+                    >
+                      <option value="ALL">All Categories</option>
+                      <option value="FOOD">Food</option>
+                      <option value="ELECTRONICS">Electronics</option>
+                      <option value="OTHERS">Others</option>
+                    </select>
+                  </div>
+
+                  <div className="admin-filter-group">
+                    <span className="admin-filter-label">Visibility:</span>
+                    <select
+                      className="ui-input ui-select ui-select--compact"
+                      value={productActiveFilter}
+                      onChange={(e) => setProductActiveFilter(e.target.value)}
+                    >
+                      <option value="ALL">All Items</option>
+                      <option value="ACTIVE_ONLY">Active Only (Visible in Shop)</option>
+                      <option value="INACTIVE_ONLY">Inactive Only (Hidden)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <Button variant="primary" onClick={handleOpenCreateProduct}>
+                    + Add New Product
+                  </Button>
+                </div>
+              </div>
+
+              {filteredProducts.length === 0 ? (
+                <Card className="empty-state-card">
+                  <div className="empty-state">
+                    <span className="empty-state__icon">📦</span>
+                    <h3>No products found</h3>
+                    <p>Try modifying your search or filter, or create a new product above.</p>
+                  </div>
+                </Card>
+              ) : (
+                <div className="admin-table-container">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Product & Details</th>
+                        <th>Category</th>
+                        <th>Price</th>
+                        <th>Weight & Size</th>
+                        <th>Handling</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredProducts.map((p) => (
+                        <tr key={p.id} style={{ opacity: p.isActive ? 1 : 0.65 }}>
+                          <td className="table-cell-bold">#{p.id}</td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <img
+                                src={p.imageUrl || 'https://picsum.photos/seed/carry/60/60'}
+                                alt={p.name}
+                                style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = 'https://picsum.photos/seed/placeholder/60/60';
+                                }}
+                              />
+                              <div>
+                                <div style={{ fontWeight: 600 }}>{p.name}</div>
+                                {p.description && (
+                                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {p.description}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <span className="cart-badge cart-badge--category">{p.category}</span>
+                          </td>
+                          <td style={{ fontWeight: 700 }}>৳{parseFloat(p.estimatedPrice).toFixed(2)}</td>
+                          <td>
+                            <div style={{ fontSize: '0.8rem' }}>
+                              <span>Weight: <strong>{p.weightClass}</strong></span><br />
+                              <span>Size: <strong>{p.sizeClass}</strong></span>
+                            </div>
+                          </td>
+                          <td>
+                            {p.isSensitive ? (
+                              <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', background: '#fef3c7', color: '#b45309', borderRadius: '4px', fontWeight: 600 }}>
+                                ⚠️ Fragile (+৳20)
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Standard</span>
+                            )}
+                          </td>
+                          <td>
+                            <span style={{
+                              padding: '0.25rem 0.5rem',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              background: p.isActive ? '#dcfce7' : '#fee2e2',
+                              color: p.isActive ? '#15803d' : '#b91c1c'
+                            }}>
+                              {p.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleOpenEditProduct(p)}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant={p.isActive ? 'outline' : 'secondary'}
+                                size="sm"
+                                onClick={() => handleToggleProductActive(p)}
+                                style={p.isActive ? { borderColor: '#fca5a5', color: '#b91c1c' } : {}}
+                              >
+                                {p.isActive ? 'Deactivate' : 'Activate'}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1362,6 +1681,197 @@ export default function AdminPage() {
                 </Button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL 4: CREATE / EDIT PRODUCT MODAL                          */}
+      {/* ============================================================ */}
+      {productModalOpen && (
+        <div className="admin-modal-backdrop" onClick={() => setProductModalOpen(false)}>
+          <div
+            className="admin-modal-content"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="product-modal-title"
+            style={{ maxWidth: '640px' }}
+          >
+            <div className="admin-modal-header">
+              <div>
+                <span className="complaint-id-tag">
+                  {editingProduct ? `#PROD-${editingProduct.id}` : 'New Catalog Item'}
+                </span>
+                <h2 id="product-modal-title" className="admin-modal-title">
+                  {editingProduct ? `Edit: ${editingProduct.name}` : 'Add New Product to Store'}
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="admin-modal-close"
+                onClick={() => setProductModalOpen(false)}
+                aria-label="Close modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProduct} className="admin-modal-body">
+              {productModalError && (
+                <div className="ui-alert ui-alert--error" role="alert">
+                  {productModalError}
+                </div>
+              )}
+
+              {productModalSuccess && (
+                <div className="ui-alert ui-alert--success" role="alert">
+                  {productModalSuccess}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div>
+                  <label className="meta-label">Product Name *</label>
+                  <Input
+                    name="name"
+                    placeholder="e.g. Hyderabadi Kacchi Biryani"
+                    value={productForm.name}
+                    onChange={(e) => setProductForm((prev) => ({ ...prev, name: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label className="meta-label">Category *</label>
+                    <select
+                      className="ui-input ui-select"
+                      value={productForm.category}
+                      onChange={(e) => setProductForm((prev) => ({ ...prev, category: e.target.value }))}
+                    >
+                      <option value="FOOD">FOOD</option>
+                      <option value="ELECTRONICS">ELECTRONICS</option>
+                      <option value="OTHERS">OTHERS</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="meta-label">Estimated Price (৳) *</label>
+                    <Input
+                      name="estimatedPrice"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="e.g. 350.00"
+                      value={productForm.estimatedPrice}
+                      onChange={(e) => setProductForm((prev) => ({ ...prev, estimatedPrice: e.target.value }))}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label className="meta-label">Weight Class *</label>
+                    <select
+                      className="ui-input ui-select"
+                      value={productForm.weightClass}
+                      onChange={(e) => setProductForm((prev) => ({ ...prev, weightClass: e.target.value }))}
+                    >
+                      <option value="LIGHT">LIGHT (+৳0)</option>
+                      <option value="MEDIUM">MEDIUM (+৳15)</option>
+                      <option value="HEAVY">HEAVY (+৳30)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="meta-label">Size Class *</label>
+                    <select
+                      className="ui-input ui-select"
+                      value={productForm.sizeClass}
+                      onChange={(e) => setProductForm((prev) => ({ ...prev, sizeClass: e.target.value }))}
+                    >
+                      <option value="SMALL">SMALL (+৳0)</option>
+                      <option value="MEDIUM">MEDIUM (+৳10)</option>
+                      <option value="LARGE">LARGE (+৳25)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '2rem', padding: '0.5rem 0', flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={productForm.isSensitive}
+                      onChange={(e) => setProductForm((prev) => ({ ...prev, isSensitive: e.target.checked }))}
+                    />
+                    <span>⚠️ Fragile / Sensitive handling (+৳20)</span>
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={productForm.isActive}
+                      onChange={(e) => setProductForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+                    />
+                    <span>✓ Active (visible in public shop)</span>
+                  </label>
+                </div>
+
+                <div>
+                  <label className="meta-label">Image URL (plain text URL)</label>
+                  <Input
+                    name="imageUrl"
+                    placeholder="https://picsum.photos/seed/.../400/300"
+                    value={productForm.imageUrl}
+                    onChange={(e) => setProductForm((prev) => ({ ...prev, imageUrl: e.target.value }))}
+                  />
+                  {productForm.imageUrl && (
+                    <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Preview:</span>
+                      <img
+                        src={productForm.imageUrl}
+                        alt="Preview"
+                        style={{ width: '60px', height: '45px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="meta-label">Description</label>
+                  <textarea
+                    className="ui-input"
+                    rows={3}
+                    placeholder="Detailed item description, specs, or package notes..."
+                    value={productForm.description}
+                    onChange={(e) => setProductForm((prev) => ({ ...prev, description: e.target.value }))}
+                    style={{ width: '100%', resize: 'vertical' }}
+                  />
+                </div>
+              </div>
+
+              <div className="modal-btn-row" style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setProductModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  isLoading={isSavingProduct}
+                >
+                  {editingProduct ? 'Save Changes' : 'Create Product'}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

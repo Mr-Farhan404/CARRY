@@ -1,9 +1,11 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { CartProvider } from './context/CartContext';
 import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import HomePage from './pages/HomePage';
+import ShopPage from './pages/ShopPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import MyRequestsPage from './pages/MyRequestsPage';
@@ -19,12 +21,14 @@ import AdminRoute from './components/AdminRoute';
 function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          {/* Public Routes */}
-          <Route index element={<HomePage />} />
-          <Route path="login" element={<LoginPage />} />
-          <Route path="register" element={<RegisterPage />} />
+      <CartProvider>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            {/* Public Routes */}
+            <Route index element={<HomePage />} />
+            <Route path="shop" element={<ShopPage />} />
+            <Route path="login" element={<LoginPage />} />
+            <Route path="register" element={<RegisterPage />} />
 
           {/* Protected Customer Routes */}
           <Route
@@ -100,6 +104,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
         </Routes>
+      </CartProvider>
     </AuthProvider>
   );
 }

@@ -1,10 +1,12 @@
 import React from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useCart } from '../../context/CartContext';
 import Button from '../common/Button';
 
 export default function Navbar() {
   const { user, isAuthenticated, isAdmin, logout } = useAuth();
+  const { openCart, totalCount } = useCart();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -29,6 +31,15 @@ export default function Navbar() {
             }
           >
             Home
+          </NavLink>
+
+          <NavLink
+            to="/shop"
+            className={({ isActive }) =>
+              `navbar__link ${isActive ? 'navbar__link--active' : ''}`
+            }
+          >
+            🛍️ Shop
           </NavLink>
 
           {isAuthenticated ? (
@@ -101,6 +112,17 @@ export default function Navbar() {
                 </NavLink>
               )}
 
+              <button
+                type="button"
+                className="navbar__cart-btn"
+                onClick={openCart}
+                title="View Shopping Cart"
+                aria-label="View Shopping Cart"
+              >
+                <span className="navbar__cart-icon">🛒</span>
+                {totalCount > 0 && <span className="navbar__cart-badge">{totalCount}</span>}
+              </button>
+
               <div className="navbar__user-section">
                 <div className="navbar__user-info" title={user?.email}>
                   <span className="navbar__user-name">{user?.fullName || 'Student'}</span>
@@ -121,6 +143,17 @@ export default function Navbar() {
             </>
           ) : (
             <div className="navbar__auth-links">
+              <button
+                type="button"
+                className="navbar__cart-btn"
+                onClick={openCart}
+                title="View Shopping Cart"
+                aria-label="View Shopping Cart"
+              >
+                <span className="navbar__cart-icon">🛒</span>
+                {totalCount > 0 && <span className="navbar__cart-badge">{totalCount}</span>}
+              </button>
+
               <NavLink
                 to="/login"
                 className={({ isActive }) =>
