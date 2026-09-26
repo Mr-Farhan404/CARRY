@@ -4,10 +4,13 @@ import { calculateEstimatedDeliveryCharge } from '../constants/deliveryCharge';
 const CartContext = createContext(null);
 
 export function CartProvider({ children }) {
-  // Items array: [{ product, quantity }]
+  // Items array: [{ product, quantity }] for standard cart
   const [items, setItems] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [cartStep, setCartStep] = useState('CART'); // 'CART' | 'CHECKOUT'
+
+  // Dedicated single-item direct checkout (does NOT mix with cart items)
+  const [directCheckoutItem, setDirectCheckoutItem] = useState(null);
 
   // Add product to cart (or increase quantity if already present)
   const addToCart = (product, quantity = 1) => {
@@ -28,7 +31,7 @@ export function CartProvider({ children }) {
     });
   };
 
-  // Update specific item's quantity
+  // Update specific item's quantity in cart
   const updateQuantity = (productId, newQuantity) => {
     const qty = parseInt(newQuantity, 10);
     if (isNaN(qty) || qty <= 0) {
@@ -42,7 +45,7 @@ export function CartProvider({ children }) {
     );
   };
 
-  // Remove item completely
+  // Remove item completely from cart
   const removeFromCart = (productId) => {
     setItems((prevItems) =>
       prevItems.filter((item) => item.product.id !== productId)
@@ -52,39 +55,80 @@ export function CartProvider({ children }) {
   // Clear all items in cart
   const clearCart = () => {
     setItems([]);
+    setDirectCheckoutItem(null);
     setCartStep('CART');
   };
 
+  // Open standard cart drawer
   const openCart = () => {
+    setDirectCheckoutItem(null);
     setCartStep('CART');
     setIsCartOpen(true);
   };
 
+  // Open checkout for all items currently in cart
   const openCheckout = () => {
+    setDirectCheckoutItem(null);
+    setCartStep('CHECKOUT');
+    setIsCartOpen(true);
+  };
+
+  // Open direct checkout for a specific product ONLY (does not touch or include cart items)
+  const openDirectCheckout = (product, quantity = 1) => {
+    const qty = Math.max(1, parseInt(quantity, 10) || 1);
+    setDirectCheckoutItem({ product, quantity: qty });
     setCartStep('CHECKOUT');
     setIsCartOpen(true);
   };
 
   const closeCart = () => {
     setIsCartOpen(false);
+    setDirectCheckoutItem(null);
+    setCartStep('CART');
   };
 
   const toggleCart = () => setIsCartOpen((prev) => !prev);
 
-  // Calculations: matching formula
-  // need payment = productPrice + deliveryFee + gatewayFee (13.90 / 1000 = 1.39%)
-  const {
-    totalCount,
-    estimatedProductTotal,
-    estimatedDeliveryTotal,
-    gatewayFee,
-    grandTotalWithMfs,
-  } = useMemo(() => {
+  // Active items being checked out:
+  // If direct checkout is active, ONLY that single item is checked out.
+  // Otherwise, all items in the cart are checked out.
+  const activeCheckoutItems = useMemo(() => {
+    return directCheckoutItem ? [directCheckoutItem] : items;
+  }, [directCheckoutItem, items]);
+
+  // Calculations for cart badges and totals
+  const { totalCount, estimatedProductTotal, estimatedDeliveryTotal, gatewayFee, grandTotalWithMfs } =
+    useMemo(() => {
+      let count = 0;
+      let productTotal = 0;
+      let deliveryTotal = 0;
+
+      items.forEach(({ product, quantity }) => {
+        count += quantity;
+        const price = parseFloat(product.estimatedPrice) || 0;
+        productTotal += price * quantity;
+        deliveryTotal += calculateEstimatedDeliveryCharge(product, quantity);
+      });
+
+      const mfs = Math.round(productTotal * 0.0139 * 100) / 100;
+      const grand = Math.round((productTotal + deliveryTotal + mfs) * 100) / 100;
+
+      return {
+        totalCount: count,
+        estimatedProductTotal: productTotal,
+        estimatedDeliveryTotal: deliveryTotal,
+        gatewayFee: mfs,
+        grandTotalWithMfs: grand,
+      };
+    }, [items]);
+
+  // Calculations specifically for the active checkout screen (single item or cart items)
+  const checkoutTotals = useMemo(() => {
     let count = 0;
     let productTotal = 0;
     let deliveryTotal = 0;
 
-    items.forEach(({ product, quantity }) => {
+    activeCheckoutItems.forEach(({ product, quantity }) => {
       count += quantity;
       const price = parseFloat(product.estimatedPrice) || 0;
       productTotal += price * quantity;
@@ -95,16 +139,19 @@ export function CartProvider({ children }) {
     const grand = Math.round((productTotal + deliveryTotal + mfs) * 100) / 100;
 
     return {
-      totalCount: count,
-      estimatedProductTotal: productTotal,
-      estimatedDeliveryTotal: deliveryTotal,
+      count,
+      productTotal,
+      deliveryTotal,
       gatewayFee: mfs,
-      grandTotalWithMfs: grand,
+      grandTotal: grand,
     };
-  }, [items]);
+  }, [activeCheckoutItems]);
 
   const value = {
     items,
+    activeCheckoutItems,
+    directCheckoutItem,
+    isDirectCheckout: Boolean(directCheckoutItem),
     addToCart,
     updateQuantity,
     removeFromCart,
@@ -112,6 +159,7 @@ export function CartProvider({ children }) {
     isCartOpen,
     openCart,
     openCheckout,
+    openDirectCheckout,
     closeCart,
     toggleCart,
     cartStep,
@@ -122,6 +170,7 @@ export function CartProvider({ children }) {
     gatewayFee,
     grandTotalWithMfs,
     estimatedGrandTotal: grandTotalWithMfs,
+    checkoutTotals,
   };
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

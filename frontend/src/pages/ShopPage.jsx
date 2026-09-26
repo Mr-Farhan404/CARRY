@@ -7,7 +7,7 @@ import Input from '../components/common/Input';
 import Card from '../components/common/Card';
 
 export default function ShopPage() {
-  const { addToCart, openCart, openCheckout, totalCount } = useCart();
+  const { addToCart, openCart, openDirectCheckout, totalCount } = useCart();
 
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -79,11 +79,11 @@ export default function ShopPage() {
     openCart();
   };
 
-  const handleBuyNow = (product) => {
+  const handleOrderNow = (product) => {
     const qty = quantities[product.id] || 1;
-    addToCart(product, qty);
+    // Direct checkout for this product ONLY (does not touch cart)
+    openDirectCheckout(product, qty);
     setQuantities((prev) => ({ ...prev, [product.id]: 1 }));
-    openCheckout();
   };
 
   return (
@@ -229,44 +229,45 @@ export default function ShopPage() {
 
                   {/* Quantity selector & Add to cart */}
                   <div className="product-card__actions">
-                    <div className="card-qty-control">
-                      <button
-                        type="button"
-                        className="card-qty-btn"
-                        onClick={() => handleQuantityChange(product.id, -1)}
-                        aria-label="Decrease quantity"
-                      >
-                        −
-                      </button>
-                      <span className="card-qty-num">{cardQty}</span>
-                      <button
-                        type="button"
-                        className="card-qty-btn"
-                        onClick={() => handleQuantityChange(product.id, 1)}
-                        aria-label="Increase quantity"
-                      >
-                        +
-                      </button>
-                    </div>
+                    <div className="card-action-row-top">
+                      <div className="card-qty-control">
+                        <button
+                          type="button"
+                          className="card-qty-btn"
+                          onClick={() => handleQuantityChange(product.id, -1)}
+                          aria-label="Decrease quantity"
+                        >
+                          −
+                        </button>
+                        <span className="card-qty-num">{cardQty}</span>
+                        <button
+                          type="button"
+                          className="card-qty-btn"
+                          onClick={() => handleQuantityChange(product.id, 1)}
+                          aria-label="Increase quantity"
+                        >
+                          +
+                        </button>
+                      </div>
 
-                    <div className="card-btn-group">
                       <Button
                         variant="outline"
                         className="card-add-cart-btn"
                         onClick={() => handleAddToCart(product)}
                         title="Add to shopping cart"
                       >
-                        🛒 Add {cardQty > 1 && `(${cardQty})`}
-                      </Button>
-                      <Button
-                        variant="primary"
-                        className="card-buy-now-btn"
-                        onClick={() => handleBuyNow(product)}
-                        title="Pay and Order immediately"
-                      >
-                        ⚡ Order Now
+                        🛒 Add to Cart {cardQty > 1 && `(${cardQty})`}
                       </Button>
                     </div>
+
+                    <Button
+                      variant="primary"
+                      className="card-order-now-btn"
+                      onClick={() => handleOrderNow(product)}
+                      title="Direct order for this product only"
+                    >
+                      ⚡ Order Now (৳{((parseFloat(product.estimatedPrice) || 0) * cardQty + totalEstDelivery).toFixed(0)})
+                    </Button>
                   </div>
                 </div>
               </div>

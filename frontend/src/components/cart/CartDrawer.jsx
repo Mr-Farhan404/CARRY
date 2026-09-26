@@ -11,6 +11,9 @@ import Select from '../common/Select';
 export default function CartDrawer() {
   const {
     items,
+    activeCheckoutItems,
+    isDirectCheckout,
+    directCheckoutItem,
     isCartOpen,
     closeCart,
     updateQuantity,
@@ -23,6 +26,7 @@ export default function CartDrawer() {
     estimatedDeliveryTotal,
     gatewayFee,
     grandTotalWithMfs,
+    checkoutTotals,
   } = useCart();
 
   const { isAuthenticated, token } = useAuth();
@@ -132,7 +136,7 @@ export default function CartDrawer() {
       navigate('/login');
       return;
     }
-    if (items.length === 0) return;
+    if (activeCheckoutItems.length === 0) return;
 
     const validationErrors = validateCheckoutForm();
     if (Object.keys(validationErrors).length > 0) {
@@ -144,7 +148,7 @@ export default function CartDrawer() {
     setCheckoutError(null);
 
     try {
-      const payload = items.map((item) => ({
+      const payload = activeCheckoutItems.map((item) => ({
         productId: item.product.id,
         quantity: item.quantity,
         pickupArea: checkoutForm.pickupArea,
@@ -158,9 +162,13 @@ export default function CartDrawer() {
       const response = await requestsApi.checkout(payload, token);
       setCreatedOrders({
         requests: response,
-        paymentInfo: { ...checkoutForm, totalPaid: grandTotalWithMfs },
+        paymentInfo: { ...checkoutForm, totalPaid: checkoutTotals.grandTotal },
+        isDirect: isDirectCheckout,
       });
-      clearCart();
+
+      if (!isDirectCheckout) {
+        clearCart();
+      }
     } catch (err) {
       console.error('Checkout failed:', err);
       setCheckoutError(err.message || 'Failed to complete checkout. Please try again.');
@@ -175,6 +183,14 @@ export default function CartDrawer() {
     navigate('/requests');
   };
 
+  const handleBack = () => {
+    if (isDirectCheckout) {
+      closeCart();
+    } else {
+      setCartStep('CART');
+    }
+  };
+
   return (
     <div className="cart-backdrop" onClick={closeCart}>
       <div className="cart-drawer" onClick={(e) => e.stopPropagation()}>
@@ -185,19 +201,23 @@ export default function CartDrawer() {
               <button
                 type="button"
                 className="cart-back-btn"
-                onClick={() => setCartStep('CART')}
-                title="Back to Cart Items"
-                aria-label="Back to Cart"
+                onClick={handleBack}
+                title={isDirectCheckout ? 'Close direct order' : 'Back to Cart Items'}
+                aria-label="Back"
               >
                 ←
               </button>
             )}
-            <span className="cart-drawer__icon">🛒</span>
+            <span className="cart-drawer__icon">
+              {isDirectCheckout ? '⚡' : '🛒'}
+            </span>
             <h2>
               {createdOrders
                 ? 'Order Placed!'
                 : cartStep === 'CHECKOUT'
-                ? 'Delivery & Payment'
+                ? isDirectCheckout
+                  ? 'Instant Order & Payment'
+                  : 'Delivery & Payment'
                 : `Your Cart ${totalCount > 0 ? `(${totalCount})` : ''}`}
             </h2>
           </div>
@@ -293,6 +313,49 @@ export default function CartDrawer() {
             )}
 
             <form onSubmit={handleSubmitOrder} className="cart-checkout-form" noValidate>
+              {/* Product Details (Short Summary) */}
+              <div className="cart-form-section cart-product-preview-section">
+                <div className="preview-header-row">
+                  <h3 className="cart-section-title">📦 Product Details</h3>
+                  {isDirectCheckout && (
+                    <span className="direct-order-badge">⚡ Direct Order</span>
+                  )}
+                </div>
+
+                <div className="cart-preview-list">
+                  {activeCheckoutItems.map(({ product, quantity }) => {
+                    const price = parseFloat(product.estimatedPrice) || 0;
+                    const delivery = calculateEstimatedDeliveryCharge(product, quantity);
+                    return (
+                      <div key={product.id} className="cart-preview-item">
+                        <img
+                          src={product.imageUrl || 'https://picsum.photos/seed/carry/60/60'}
+                          alt={product.name}
+                          className="cart-preview-thumb"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = 'https://picsum.photos/seed/carry/60/60';
+                          }}
+                        />
+                        <div className="cart-preview-info">
+                          <h4 className="cart-preview-name">{product.name}</h4>
+                          <div className="cart-preview-tags">
+                            <span className="preview-tag preview-tag--cat">{product.category}</span>
+                            {product.isSensitive && (
+                              <span className="preview-tag preview-tag--fragile">Fragile</span>
+                            )}
+                          </div>
+                          <div className="cart-preview-math">
+                            <span>Qty: <strong>{quantity}</strong> × ৳{price.toFixed(2)}</span>
+                            <span className="preview-deliv">+৳{delivery.toFixed(2)} delivery</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Pickup Information */}
               <div className="cart-form-section">
                 <h3 className="cart-section-title">📍 Pickup Location (Khulna)</h3>
@@ -349,27 +412,27 @@ export default function CartDrawer() {
                 {/* Price Breakdown Summary */}
                 <div className="cart-cost-summary-box">
                   <div className="cost-row">
-                    <span>Products Subtotal ({totalCount} items):</span>
-                    <strong>৳{estimatedProductTotal.toFixed(2)}</strong>
+                    <span>Products Subtotal ({checkoutTotals.count} items):</span>
+                    <strong>৳{checkoutTotals.productTotal.toFixed(2)}</strong>
                   </div>
                   <div className="cost-row">
                     <span>Campus Delivery Charge:</span>
-                    <strong>৳{estimatedDeliveryTotal.toFixed(2)}</strong>
+                    <strong>৳{checkoutTotals.deliveryTotal.toFixed(2)}</strong>
                   </div>
                   <div className="cost-row">
                     <span>MFS Cash-out Fee (13.90/1000 = 1.39%):</span>
-                    <strong>৳{gatewayFee.toFixed(2)}</strong>
+                    <strong>৳{checkoutTotals.gatewayFee.toFixed(2)}</strong>
                   </div>
                   <div className="cost-row cost-row--total">
                     <span>Total Upfront Payment:</span>
-                    <span className="total-highlight">৳{grandTotalWithMfs.toFixed(2)}</span>
+                    <span className="total-highlight">৳{checkoutTotals.grandTotal.toFixed(2)}</span>
                   </div>
                 </div>
 
                 {/* MFS Send Money Instruction Notice */}
                 <div className="cart-mfs-instruction-box">
                   <p className="mfs-instruction-head">
-                    📢 Send Money / Cash In <strong>৳{grandTotalWithMfs.toFixed(2)}</strong> to Carry Campus Account:
+                    📢 Send Money / Cash In <strong>৳{checkoutTotals.grandTotal.toFixed(2)}</strong> to Carry Campus Account:
                   </p>
                   <div className="mfs-account-pill">
                     📱 <strong>01700000000</strong> <span>(bKash / Nagad Personal)</span>
@@ -451,10 +514,10 @@ export default function CartDrawer() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setCartStep('CART')}
+                  onClick={handleBack}
                   disabled={isSubmitting}
                 >
-                  ← Back to Items
+                  {isDirectCheckout ? 'Cancel' : '← Back to Items'}
                 </Button>
                 <Button
                   type="submit"
@@ -462,7 +525,7 @@ export default function CartDrawer() {
                   isLoading={isSubmitting}
                   disabled={isSubmitting}
                 >
-                  Confirm & Pay ৳{grandTotalWithMfs.toFixed(2)}
+                  Confirm & Pay ৳{checkoutTotals.grandTotal.toFixed(2)}
                 </Button>
               </div>
             </form>
