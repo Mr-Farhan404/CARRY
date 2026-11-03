@@ -283,24 +283,40 @@ public class ProfileFragment extends Fragment {
                 api.applyRole(dto).enqueue(new Callback<RoleApplication>() {
                     @Override
                     public void onResponse(Call<RoleApplication> call, Response<RoleApplication> response) {
+                        if (!isAdded() || getContext() == null) return;
                         if (response.isSuccessful()) {
                             Toast.makeText(requireContext(), "Delivery Partner application submitted!", Toast.LENGTH_LONG).show();
                             dialog.dismiss();
                             loadMyApplications();
                         } else {
-                            Toast.makeText(requireContext(), "Failed: " + response.message(), Toast.LENGTH_LONG).show();
+                            String err = parseErrorMessage(response);
+                            Toast.makeText(requireContext(), "Submission Failed: " + err, Toast.LENGTH_LONG).show();
                         }
                     }
 
                     @Override
                     public void onFailure(Call<RoleApplication> call, Throwable t) {
-                        Toast.makeText(requireContext(), "Error: " + t.getMessage(), Toast.LENGTH_LONG).show();
+                        if (!isAdded() || getContext() == null) return;
+                        Toast.makeText(requireContext(), "Network Error: " + t.getMessage(), Toast.LENGTH_LONG).show();
                     }
                 });
             });
         });
 
         dialog.show();
+    }
+
+    private String parseErrorMessage(Response<?> response) {
+        if (response.errorBody() != null) {
+            try {
+                String body = response.errorBody().string();
+                com.google.gson.JsonObject obj = com.google.gson.JsonParser.parseString(body).getAsJsonObject();
+                if (obj.has("message")) {
+                    return obj.get("message").getAsString();
+                }
+            } catch (Exception ignored) {}
+        }
+        return response.message() != null && !response.message().isEmpty() ? response.message() : "Error " + response.code();
     }
 
     private void showApplyModeratorDialog() {
@@ -363,18 +379,21 @@ public class ProfileFragment extends Fragment {
                 api.applyRole(dto).enqueue(new Callback<RoleApplication>() {
                     @Override
                     public void onResponse(Call<RoleApplication> call, Response<RoleApplication> response) {
+                        if (!isAdded() || getContext() == null) return;
                         if (response.isSuccessful()) {
                             Toast.makeText(requireContext(), "Moderator application submitted!", Toast.LENGTH_LONG).show();
                             dialog.dismiss();
                             loadMyApplications();
                         } else {
-                            Toast.makeText(requireContext(), "Failed: " + response.message(), Toast.LENGTH_LONG).show();
+                            String err = parseErrorMessage(response);
+                            Toast.makeText(requireContext(), "Submission Failed: " + err, Toast.LENGTH_LONG).show();
                         }
                     }
 
                     @Override
                     public void onFailure(Call<RoleApplication> call, Throwable t) {
-                        Toast.makeText(requireContext(), "Error: " + t.getMessage(), Toast.LENGTH_LONG).show();
+                        if (!isAdded() || getContext() == null) return;
+                        Toast.makeText(requireContext(), "Network Error: " + t.getMessage(), Toast.LENGTH_LONG).show();
                     }
                 });
             });
@@ -449,6 +468,7 @@ public class ProfileFragment extends Fragment {
 
             @Override
             public void onFailure(Call<List<RoleApplication>> call, Throwable t) {
+                if (!isAdded() || getContext() == null) return;
                 Toast.makeText(requireContext(), "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });
@@ -460,7 +480,7 @@ public class ProfileFragment extends Fragment {
         api.getModeratorApplications().enqueue(new Callback<List<RoleApplication>>() {
             @Override
             public void onResponse(Call<List<RoleApplication>> call, Response<List<RoleApplication>> response) {
-                if (!isAdded()) return;
+                if (!isAdded() || getContext() == null) return;
                 if (!response.isSuccessful() || response.body() == null || response.body().isEmpty()) {
                     new AlertDialog.Builder(requireContext())
                             .setTitle("Moderator Applications")
@@ -493,6 +513,7 @@ public class ProfileFragment extends Fragment {
 
             @Override
             public void onFailure(Call<List<RoleApplication>> call, Throwable t) {
+                if (!isAdded() || getContext() == null) return;
                 Toast.makeText(requireContext(), "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });
@@ -539,6 +560,7 @@ public class ProfileFragment extends Fragment {
         call.enqueue(new Callback<RoleApplication>() {
             @Override
             public void onResponse(Call<RoleApplication> call, Response<RoleApplication> response) {
+                if (!isAdded() || getContext() == null) return;
                 if (response.isSuccessful()) {
                     Toast.makeText(requireContext(), "Application #" + appId + (approve ? " APPROVED!" : " REJECTED!"), Toast.LENGTH_SHORT).show();
                 } else {
@@ -548,6 +570,7 @@ public class ProfileFragment extends Fragment {
 
             @Override
             public void onFailure(Call<RoleApplication> call, Throwable t) {
+                if (!isAdded() || getContext() == null) return;
                 Toast.makeText(requireContext(), "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });
@@ -559,7 +582,7 @@ public class ProfileFragment extends Fragment {
         api.getModeratorReports().enqueue(new Callback<List<ModeratorReport>>() {
             @Override
             public void onResponse(Call<List<ModeratorReport>> call, Response<List<ModeratorReport>> response) {
-                if (!isAdded()) return;
+                if (!isAdded() || getContext() == null) return;
                 if (!response.isSuccessful() || response.body() == null || response.body().isEmpty()) {
                     new AlertDialog.Builder(requireContext())
                             .setTitle("Moderator Reports")
@@ -586,6 +609,7 @@ public class ProfileFragment extends Fragment {
 
             @Override
             public void onFailure(Call<List<ModeratorReport>> call, Throwable t) {
+                if (!isAdded() || getContext() == null) return;
                 Toast.makeText(requireContext(), "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });
@@ -597,7 +621,7 @@ public class ProfileFragment extends Fragment {
         api.getAllUsers().enqueue(new Callback<List<User>>() {
             @Override
             public void onResponse(Call<List<User>> call, Response<List<User>> response) {
-                if (!isAdded()) return;
+                if (!isAdded() || getContext() == null) return;
                 if (!response.isSuccessful() || response.body() == null || response.body().isEmpty()) {
                     Toast.makeText(requireContext(), "No users found or failed to load users.", Toast.LENGTH_SHORT).show();
                     return;
@@ -627,6 +651,7 @@ public class ProfileFragment extends Fragment {
 
             @Override
             public void onFailure(Call<List<User>> call, Throwable t) {
+                if (!isAdded() || getContext() == null) return;
                 Toast.makeText(requireContext(), "Error loading users: " + t.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });
@@ -669,6 +694,7 @@ public class ProfileFragment extends Fragment {
                     api.deleteUser(user.getId()).enqueue(new Callback<Void>() {
                         @Override
                         public void onResponse(Call<Void> call, Response<Void> response) {
+                            if (!isAdded() || getContext() == null) return;
                             if (response.isSuccessful()) {
                                 Toast.makeText(requireContext(), "User account deleted successfully!", Toast.LENGTH_LONG).show();
                                 showManageAccountsDialog();
@@ -679,6 +705,7 @@ public class ProfileFragment extends Fragment {
 
                         @Override
                         public void onFailure(Call<Void> call, Throwable t) {
+                            if (!isAdded() || getContext() == null) return;
                             Toast.makeText(requireContext(), "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
                         }
                     });
@@ -769,6 +796,7 @@ public class ProfileFragment extends Fragment {
                 api.createModeratorProduct(dto).enqueue(new Callback<Product>() {
                     @Override
                     public void onResponse(Call<Product> call, Response<Product> response) {
+                        if (!isAdded() || getContext() == null) return;
                         if (response.isSuccessful()) {
                             Toast.makeText(requireContext(), "Product '" + name + "' added to catalog!", Toast.LENGTH_LONG).show();
                             dialog.dismiss();
@@ -779,6 +807,7 @@ public class ProfileFragment extends Fragment {
 
                     @Override
                     public void onFailure(Call<Product> call, Throwable t) {
+                        if (!isAdded() || getContext() == null) return;
                         Toast.makeText(requireContext(), "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
                     }
                 });
@@ -823,6 +852,7 @@ public class ProfileFragment extends Fragment {
 
             @Override
             public void onFailure(Call<List<Product>> call, Throwable t) {
+                if (!isAdded() || getContext() == null) return;
                 Toast.makeText(requireContext(), "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });
@@ -888,6 +918,7 @@ public class ProfileFragment extends Fragment {
                 api.updateModeratorProduct(product.getId(), dto).enqueue(new Callback<Product>() {
                     @Override
                     public void onResponse(Call<Product> call, Response<Product> response) {
+                        if (!isAdded() || getContext() == null) return;
                         if (response.isSuccessful()) {
                             Toast.makeText(requireContext(), "Product updated successfully!", Toast.LENGTH_LONG).show();
                             dialog.dismiss();
@@ -899,6 +930,7 @@ public class ProfileFragment extends Fragment {
 
                     @Override
                     public void onFailure(Call<Product> call, Throwable t) {
+                        if (!isAdded() || getContext() == null) return;
                         Toast.makeText(requireContext(), "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
                     }
                 });
@@ -914,7 +946,7 @@ public class ProfileFragment extends Fragment {
         api.getAllCampusOrders().enqueue(new Callback<List<ProductRequest>>() {
             @Override
             public void onResponse(Call<List<ProductRequest>> call, Response<List<ProductRequest>> response) {
-                if (!isAdded()) return;
+                if (!isAdded() || getContext() == null) return;
                 if (!response.isSuccessful() || response.body() == null || response.body().isEmpty()) {
                     Toast.makeText(requireContext(), "No orders found.", Toast.LENGTH_SHORT).show();
                     return;
@@ -946,6 +978,7 @@ public class ProfileFragment extends Fragment {
 
             @Override
             public void onFailure(Call<List<ProductRequest>> call, Throwable t) {
+                if (!isAdded() || getContext() == null) return;
                 Toast.makeText(requireContext(), "Error loading orders: " + t.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });

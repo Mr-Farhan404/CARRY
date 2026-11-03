@@ -58,10 +58,10 @@ public class RoleApplication {
     private String reason;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "reviewed_by_id")
+    @JoinColumn(name = "reviewed_by")
     private User reviewedBy;
 
-    @Column(name = "reviewer_notes", columnDefinition = "TEXT")
+    @Column(name = "admin_notes", columnDefinition = "TEXT")
     private String reviewerNotes;
 
     @CreationTimestamp

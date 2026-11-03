@@ -228,6 +228,7 @@ public class DeliveriesFragment extends Fragment implements AvailableRequestAdap
         api.updateTripStatus(currentActiveTrip.getId(), new UpdateTripStatusRequest(newStatus)).enqueue(new Callback<Trip>() {
             @Override
             public void onResponse(Call<Trip> call, Response<Trip> response) {
+                if (!isAdded() || getContext() == null) return;
                 if (response.isSuccessful() && response.body() != null) {
                     Toast.makeText(requireContext(), "Trip status updated to " + newStatus.getLabel(), Toast.LENGTH_SHORT).show();
                     loadActiveTripAndRequests();
@@ -238,6 +239,7 @@ public class DeliveriesFragment extends Fragment implements AvailableRequestAdap
 
             @Override
             public void onFailure(Call<Trip> call, Throwable t) {
+                if (!isAdded() || getContext() == null) return;
                 Toast.makeText(requireContext(), "Network error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });
@@ -281,6 +283,7 @@ public class DeliveriesFragment extends Fragment implements AvailableRequestAdap
                     api.acceptRequest(request.getId(), dto).enqueue(new Callback<ProductRequest>() {
                         @Override
                         public void onResponse(Call<ProductRequest> call, Response<ProductRequest> response) {
+                            if (!isAdded() || getContext() == null) return;
                             if (response.isSuccessful()) {
                                 Toast.makeText(requireContext(), "Order accepted! Pick it up during your trip.", Toast.LENGTH_LONG).show();
                                 loadActiveTripAndRequests();
@@ -291,6 +294,7 @@ public class DeliveriesFragment extends Fragment implements AvailableRequestAdap
 
                         @Override
                         public void onFailure(Call<ProductRequest> call, Throwable t) {
+                            if (!isAdded() || getContext() == null) return;
                             Toast.makeText(requireContext(), "Network error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
                         }
                     });
