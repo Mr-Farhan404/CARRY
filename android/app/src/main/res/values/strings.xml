@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CARRY</string>
+    <string name="app_tagline">KUET Campus Delivery &amp; Carpooling</string>
+
+    <!-- Navigation -->
+    <string name="nav_shop">Shop</string>
+    <string name="nav_new_request">New Request</string>
+    <string name="nav_my_requests">My Requests</string>
+    <string name="nav_deliveries">Deliveries</string>
+    <string name="nav_profile">Profile</string>
+
+    <!-- General Actions -->
+    <string name="action_login">Log In</string>
+    <string name="action_register">Register</string>
+    <string name="action_logout">Log Out</string>
+    <string name="action_checkout">Proceed to Checkout</string>
+    <string name="action_confirm_pay">Confirm &amp; Pay</string>
+    <string name="action_order_now">Order Now</string>
+    <string name="action_add_cart">Add to Cart</string>
+    <string name="action_cancel">Cancel</string>
+
+    <!-- MFS Instructions -->
+    <string name="mfs_campus_account">01700000000</string>
+    <string name="mfs_instruction_banner">Send Money to Carry Campus Account:</string>
+    <string name="mfs_fee_note">MFS Cash-out Fee: 13.90/1000 (1.39%)</string>
+</resources>

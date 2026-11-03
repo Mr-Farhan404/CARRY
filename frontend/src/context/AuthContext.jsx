@@ -40,14 +40,34 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    if (!token) return null;
+    try {
+      const userProfile = await authApi.getMe(token);
+      setUser(userProfile);
+      return userProfile;
+    } catch (e) {
+      console.error('Failed to refresh user profile', e);
+      return null;
+    }
+  }, [token]);
+
+  const role = user?.role || (user?.isAdmin ? 'ADMIN' : 'STUDENT');
+
   const value = {
     token,
     user,
+    role,
     isAuthenticated: Boolean(token && user),
-    isAdmin: Boolean(user?.isAdmin),
+    isAdmin: Boolean(user?.isAdmin || role === 'ADMIN'),
+    isModerator: role === 'MODERATOR',
+    isDeliveryPartner: role === 'DELIVERY_PARTNER',
+    isTeacher: role === 'TEACHER',
+    isStudent: role === 'STUDENT',
     isLoading,
     login,
     register,
+    refreshProfile,
     logout,
   };
 

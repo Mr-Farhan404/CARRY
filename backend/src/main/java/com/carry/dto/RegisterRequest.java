@@ -1,5 +1,6 @@
 package com.carry.dto;
 
+import com.carry.entity.UserRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -11,7 +12,7 @@ public class RegisterRequest {
     @NotBlank(message = "Full name is required")
     private String fullName;
 
-    @NotBlank(message = "Student ID is required")
+    @NotBlank(message = "Student ID or Teacher ID is required")
     private String studentId;
 
     @NotBlank(message = "Email is required")
@@ -21,6 +22,8 @@ public class RegisterRequest {
     private String phone;
 
     private String department;
+
+    private UserRole role = UserRole.STUDENT;
 
     @NotBlank(message = "Password is required")
     @Size(min = 8, message = "Password must be at least 8 characters")

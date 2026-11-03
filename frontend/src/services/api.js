@@ -249,6 +249,93 @@ export const adminApi = {
     request(`/api/admin/products/${id}/deactivate`, {
       method: 'PUT',
     }, token),
+
+  deleteUser: (id, token) =>
+    request(`/api/admin/users/${id}`, {
+      method: 'DELETE',
+    }, token),
+
+  getModeratorReports: (token) =>
+    request('/api/admin/moderator-reports', {
+      method: 'GET',
+    }, token),
+
+  getModeratorApplications: (token) =>
+    request('/api/admin/moderator-applications', {
+      method: 'GET',
+    }, token),
+
+  approveModeratorApplication: (id, notes, token) =>
+    request(`/api/admin/moderator-applications/${id}/approve${notes ? `?notes=${encodeURIComponent(notes)}` : ''}`, {
+      method: 'PUT',
+    }, token),
+
+  rejectModeratorApplication: (id, notes, token) =>
+    request(`/api/admin/moderator-applications/${id}/reject${notes ? `?notes=${encodeURIComponent(notes)}` : ''}`, {
+      method: 'PUT',
+    }, token),
+};
+
+export const moderatorApi = {
+  getPartnerApplications: (token) =>
+    request('/api/moderator/applications', {
+      method: 'GET',
+    }, token),
+
+  getAllPartnerApplications: (token) =>
+    request('/api/moderator/applications/all', {
+      method: 'GET',
+    }, token),
+
+  approvePartnerApplication: (id, notes, token) =>
+    request(`/api/moderator/applications/${id}/approve${notes ? `?notes=${encodeURIComponent(notes)}` : ''}`, {
+      method: 'PUT',
+    }, token),
+
+  rejectPartnerApplication: (id, notes, token) =>
+    request(`/api/moderator/applications/${id}/reject${notes ? `?notes=${encodeURIComponent(notes)}` : ''}`, {
+      method: 'PUT',
+    }, token),
+
+  getProducts: (token) =>
+    request('/api/moderator/products', {
+      method: 'GET',
+    }, token),
+
+  createProduct: (productData, token) =>
+    request('/api/moderator/products', {
+      method: 'POST',
+      body: JSON.stringify(productData),
+    }, token),
+
+  updateProduct: (id, productData, token) =>
+    request(`/api/moderator/products/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(productData),
+    }, token),
+
+  toggleProductStatus: (id, isActive, token) =>
+    request(`/api/moderator/products/${id}/status?isActive=${isActive}`, {
+      method: 'PATCH',
+    }, token),
+
+  getOrders: (status, token) =>
+    request(`/api/moderator/requests${status ? `?status=${status}` : ''}`, {
+      method: 'GET',
+    }, token),
+};
+
+export const usersApi = {
+  applyRole: ({ requestedRole, reason }, token) =>
+    request('/api/users/apply-role', {
+      method: 'POST',
+      body: JSON.stringify({ requestedRole, reason }),
+    }, token),
+
+  getMyApplications: (token) =>
+    request('/api/users/my-applications', {
+      method: 'GET',
+    }, token),
 };
 
 export const complaintsApi = {

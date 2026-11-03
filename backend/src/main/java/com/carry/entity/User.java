@@ -47,6 +47,12 @@ public class User {
     @Builder.Default
     private Boolean isAdmin = false;
 
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30, nullable = false)
+    @Builder.Default
+    private UserRole role = UserRole.STUDENT;
+
     @Column(precision = 3, scale = 2)
     private BigDecimal avgRating;
 

@@ -13,6 +13,7 @@ export default function RegisterPage() {
     email: '',
     phone: '',
     department: '',
+    role: 'STUDENT',
     password: '',
     confirmPassword: '',
   });
@@ -79,6 +80,7 @@ export default function RegisterPage() {
         email: formData.email.trim().toLowerCase(),
         phone: formData.phone.trim() || null,
         department: formData.department.trim() || null,
+        role: formData.role,
         password: formData.password,
       };
 
@@ -117,6 +119,34 @@ export default function RegisterPage() {
         )}
 
         <form onSubmit={handleSubmit} className="auth-form" noValidate>
+          <div style={{ marginBottom: '16px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '8px', color: '#1e293b' }}>
+              Choose Account Type:
+            </label>
+            <div style={{ display: 'flex', gap: '20px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                <input
+                  type="radio"
+                  name="role"
+                  value="STUDENT"
+                  checked={formData.role === 'STUDENT'}
+                  onChange={handleChange}
+                />
+                🎓 <strong>Student</strong> (Can apply for Partner/Moderator)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                <input
+                  type="radio"
+                  name="role"
+                  value="TEACHER"
+                  checked={formData.role === 'TEACHER'}
+                  onChange={handleChange}
+                />
+                👨‍🏫 <strong>Teacher / Faculty</strong> (Orders only)
+              </label>
+            </div>
+          </div>
+
           <div className="form-grid">
             <Input
               label="Full Name"

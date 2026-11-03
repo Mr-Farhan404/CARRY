@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import Button from '../common/Button';
+import ProfileModal from '../profile/ProfileModal';
 
 export default function Navbar() {
-  const { user, isAuthenticated, isAdmin, logout } = useAuth();
+  const { user, role, isAuthenticated, isAdmin, isModerator, logout } = useAuth();
   const { openCart, totalCount } = useCart();
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -100,6 +102,19 @@ export default function Navbar() {
                 + Post Trip
               </NavLink>
 
+              {/* Show Moderator link when user is a moderator */}
+              {isModerator && (
+                <NavLink
+                  to="/moderator"
+                  className={({ isActive }) =>
+                    `navbar__link ${isActive ? 'navbar__link--active' : ''}`
+                  }
+                  style={{ background: '#f5f3ff', color: '#7c3aed', fontWeight: 700 }}
+                >
+                  <span>🛡️ Moderator</span>
+                </NavLink>
+              )}
+
               {/* Show Admin link ONLY when user is an admin */}
               {isAdmin && (
                 <NavLink
@@ -124,8 +139,25 @@ export default function Navbar() {
               </button>
 
               <div className="navbar__user-section">
-                <div className="navbar__user-info" title={user?.email}>
-                  <span className="navbar__user-name">{user?.fullName || 'Student'}</span>
+                <div
+                  className="navbar__user-info"
+                  title="Click to view Profile & Role Applications"
+                  onClick={() => setProfileModalOpen(true)}
+                  style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span className="navbar__user-name">{user?.fullName || 'User'}</span>
+                    <span style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      padding: '1px 6px',
+                      borderRadius: '8px',
+                      background: role === 'ADMIN' ? '#dc2626' : role === 'MODERATOR' ? '#7c3aed' : role === 'DELIVERY_PARTNER' ? '#0284c7' : role === 'TEACHER' ? '#059669' : '#64748b',
+                      color: '#fff',
+                    }}>
+                      {role === 'ADMIN' ? '👑 Admin' : role === 'MODERATOR' ? '🛡️ Mod' : role === 'DELIVERY_PARTNER' ? '🚗 Partner' : role === 'TEACHER' ? '👨‍🏫 Faculty' : '🎓 Student'}
+                    </span>
+                  </div>
                   {user?.department && (
                     <span className="navbar__user-dept">{user.department}</span>
                   )}
@@ -140,6 +172,11 @@ export default function Navbar() {
                   Logout
                 </Button>
               </div>
+
+              <ProfileModal
+                isOpen={profileModalOpen}
+                onClose={() => setProfileModalOpen(false)}
+              />
             </>
           ) : (
             <div className="navbar__auth-links">

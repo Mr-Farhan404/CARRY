@@ -6,6 +6,7 @@ import com.carry.dto.UpdateTripStatusRequest;
 import com.carry.entity.Trip;
 import com.carry.entity.TripStatus;
 import com.carry.entity.User;
+import com.carry.entity.UserRole;
 import com.carry.exception.BadRequestException;
 import com.carry.exception.ForbiddenException;
 import com.carry.exception.ResourceNotFoundException;
@@ -34,6 +35,10 @@ public class TripService {
 
         User partner = userRepository.findById(currentUser.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (partner.getRole() != UserRole.DELIVERY_PARTNER && partner.getRole() != UserRole.ADMIN && !Boolean.TRUE.equals(partner.getIsAdmin())) {
+            throw new ForbiddenException("Only Delivery Partners are authorized to post delivery trips.");
+        }
 
         Trip trip = Trip.builder()
                 .partner(partner)

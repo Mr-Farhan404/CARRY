@@ -18,6 +18,8 @@ export default function AdminPage() {
   const [users, setUsers] = useState([]);
   const [payments, setPayments] = useState([]);
   const [products, setProducts] = useState([]);
+  const [moderatorReports, setModeratorReports] = useState([]);
+  const [moderatorApplications, setModeratorApplications] = useState([]);
 
   // Loading & error states
   const [isLoading, setIsLoading] = useState(true);
@@ -79,12 +81,14 @@ export default function AdminPage() {
     setError(null);
 
     try {
-      const [complaintsData, requestsData, usersData, paymentsData, productsData] = await Promise.all([
+      const [complaintsData, requestsData, usersData, paymentsData, productsData, reportsData, modAppsData] = await Promise.all([
         adminApi.getComplaints(token),
         adminApi.getRequests('ALL', token),
         adminApi.getUsers(token),
         adminApi.getPayments(token),
         adminApi.getProducts(token),
+        adminApi.getModeratorReports(token).catch(() => []),
+        adminApi.getModeratorApplications(token).catch(() => []),
       ]);
 
       setComplaints(complaintsData || []);
@@ -92,6 +96,8 @@ export default function AdminPage() {
       setUsers(usersData || []);
       setPayments(paymentsData || []);
       setProducts(productsData || []);
+      setModeratorReports(reportsData || []);
+      setModeratorApplications(modAppsData || []);
     } catch (err) {
       console.error('Failed to load admin data:', err);
       setError(err.message || 'Failed to fetch administrative data');
@@ -369,13 +375,52 @@ export default function AdminPage() {
     });
   }, [requests, requestStatusFilter, requestSearch]);
 
+  // Delete User Action (Admin exclusive)
+  const handleDeleteUser = async (targetUser) => {
+    if (!window.confirm(`Are you sure you want to permanently delete ${targetUser.fullName} (${targetUser.email})?\nRole: ${targetUser.role || 'STUDENT'}\nThis will delete all their applications, ratings, and records.`)) {
+      return;
+    }
+
+    try {
+      await adminApi.deleteUser(targetUser.id, token);
+      setUsers((prev) => prev.filter((u) => u.id !== targetUser.id));
+      alert(`User ${targetUser.fullName} was successfully deleted.`);
+    } catch (err) {
+      console.error('Failed to delete user:', err);
+      alert(`Error deleting user: ${err.message}`);
+    }
+  };
+
+  // Review Moderator Application (Admin exclusive)
+  const handleReviewModeratorApp = async (appId, approve) => {
+    const notes = prompt(`Enter ${approve ? 'approval' : 'rejection'} notes (optional):`);
+    if (notes === null) return;
+
+    try {
+      const updated = approve
+        ? await adminApi.approveModeratorApplication(appId, notes, token)
+        : await adminApi.rejectModeratorApplication(appId, notes, token);
+
+      setModeratorApplications((prev) =>
+        prev.map((a) => (a.id === appId ? updated : a))
+      );
+      // Refresh users list so new moderator role reflects immediately
+      const usersData = await adminApi.getUsers(token);
+      setUsers(usersData || []);
+      alert(`Application #${appId} was successfully ${approve ? 'APPROVED' : 'REJECTED'}.`);
+    } catch (err) {
+      console.error('Failed to review application:', err);
+      alert(`Error reviewing application: ${err.message}`);
+    }
+  };
+
   // Filtered Users
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
       const matchesRole =
         userRoleFilter === 'ALL' ||
-        (userRoleFilter === 'ADMIN' && u.isAdmin) ||
-        (userRoleFilter === 'STUDENT' && !u.isAdmin);
+        (userRoleFilter === 'ADMIN' && (u.isAdmin || u.role === 'ADMIN')) ||
+        u.role === userRoleFilter;
 
       const q = userSearch.toLowerCase().trim();
       const matchesSearch =
@@ -425,6 +470,10 @@ export default function AdminPage() {
 
   const unverifiedPaymentsCount = payments.filter(
     (p) => p.status === 'SUBMITTED' || p.additionalPaymentStatus === 'SUBMITTED'
+  ).length;
+
+  const pendingModeratorAppsCount = moderatorApplications.filter(
+    (a) => a.status === 'PENDING'
   ).length;
 
   const formatDate = (dateStr) => {
@@ -569,6 +618,32 @@ export default function AdminPage() {
         >
           <span>User Directory</span>
           <span className="admin-tab-count">{users.length}</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'moderator-reports'}
+          className={`admin-tab ${activeTab === 'moderator-reports' ? 'admin-tab--active' : ''}`}
+          onClick={() => setActiveTab('moderator-reports')}
+        >
+          <span>📜 Moderator Reports</span>
+          <span className="admin-tab-count">{moderatorReports.length}</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'moderator-apps'}
+          className={`admin-tab ${activeTab === 'moderator-apps' ? 'admin-tab--active' : ''}`}
+          onClick={() => setActiveTab('moderator-apps')}
+        >
+          <span>🛡️ Mod Applications</span>
+          {pendingModeratorAppsCount > 0 ? (
+            <span className="admin-tab-count admin-tab-count--alert">{pendingModeratorAppsCount}</span>
+          ) : (
+            <span className="admin-tab-count">{moderatorApplications.length}</span>
+          )}
         </button>
       </div>
 
@@ -992,8 +1067,11 @@ export default function AdminPage() {
                     onChange={(e) => setUserRoleFilter(e.target.value)}
                   >
                     <option value="ALL">All Roles</option>
-                    <option value="ADMIN">Admins Only</option>
-                    <option value="STUDENT">Students Only</option>
+                    <option value="ADMIN">👑 Admin</option>
+                    <option value="MODERATOR">🛡️ Moderator</option>
+                    <option value="DELIVERY_PARTNER">🚗 Delivery Partner</option>
+                    <option value="STUDENT">🎓 Student</option>
+                    <option value="TEACHER">👨‍🏫 Teacher</option>
                   </select>
                 </div>
               </div>
@@ -1012,7 +1090,7 @@ export default function AdminPage() {
                     <thead>
                       <tr>
                         <th>ID</th>
-                        <th>Student ID</th>
+                        <th>Student / Employee ID</th>
                         <th>Full Name</th>
                         <th>Email</th>
                         <th>Department</th>
@@ -1020,6 +1098,7 @@ export default function AdminPage() {
                         <th>Role</th>
                         <th>Avg Rating</th>
                         <th>Joined</th>
+                        <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1034,10 +1113,16 @@ export default function AdminPage() {
                           <td>{u.department || '—'}</td>
                           <td>{u.phone || '—'}</td>
                           <td>
-                            {u.isAdmin ? (
-                              <span className="admin-role-badge">Admin</span>
+                            {u.role === 'ADMIN' || u.isAdmin ? (
+                              <span className="admin-role-badge">👑 Admin</span>
+                            ) : u.role === 'MODERATOR' ? (
+                              <span className="admin-role-badge" style={{ backgroundColor: '#7c3aed', color: '#fff' }}>🛡️ Mod</span>
+                            ) : u.role === 'DELIVERY_PARTNER' ? (
+                              <span className="user-role-badge" style={{ backgroundColor: '#0284c7', color: '#fff' }}>🚗 Partner</span>
+                            ) : u.role === 'TEACHER' ? (
+                              <span className="user-role-badge" style={{ backgroundColor: '#059669', color: '#fff' }}>👨‍🏫 Teacher</span>
                             ) : (
-                              <span className="user-role-badge">Student</span>
+                              <span className="user-role-badge">🎓 Student</span>
                             )}
                           </td>
                           <td>
@@ -1048,6 +1133,29 @@ export default function AdminPage() {
                             )}
                           </td>
                           <td className="table-cell-date">{formatDate(u.createdAt)}</td>
+                          <td>
+                            {u.id !== user?.id ? (
+                              <button
+                                type="button"
+                                style={{
+                                  backgroundColor: '#fee2e2',
+                                  color: '#dc2626',
+                                  border: '1px solid #fca5a5',
+                                  borderRadius: '4px',
+                                  padding: '4px 8px',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                }}
+                                onClick={() => handleDeleteUser(u)}
+                                title="Delete this account permanently (Admin only)"
+                              >
+                                🗑️ Delete
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic' }}>You</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1206,6 +1314,187 @@ export default function AdminPage() {
                                 {p.isActive ? 'Deactivate' : 'Activate'}
                               </Button>
                             </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* TAB 6: MODERATOR ACTIVITY REPORTS                            */}
+          {/* ============================================================ */}
+          {activeTab === 'moderator-reports' && (
+            <div className="moderator-reports-tab">
+              <div style={{ marginBottom: '1rem', padding: '12px 16px', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '8px', color: '#5b21b6' }}>
+                <strong>🛡️ Real-Time Moderator Audit Trail:</strong> Every action taken by a Moderator (approving delivery partners, adding/editing catalog products, updating prices) is permanently logged here for your inspection.
+              </div>
+
+              {moderatorReports.length === 0 ? (
+                <Card className="empty-state-card">
+                  <div className="empty-state">
+                    <span className="empty-state__icon">📋</span>
+                    <h3>No moderator actions logged yet</h3>
+                    <p>When moderators perform catalog modifications or approve delivery partners, reports will show here.</p>
+                  </div>
+                </Card>
+              ) : (
+                <div className="admin-table-container">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Report ID</th>
+                        <th>Moderator</th>
+                        <th>Action Type</th>
+                        <th>Target ID</th>
+                        <th>Description</th>
+                        <th>Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {moderatorReports.map((r) => (
+                        <tr key={r.id}>
+                          <td className="table-cell-bold">#{r.id}</td>
+                          <td className="table-cell-title">
+                            <span style={{ fontWeight: 600, color: '#7c3aed' }}>🛡️ {r.moderatorName}</span>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>User ID: #{r.moderatorId}</div>
+                          </td>
+                          <td>
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              background: r.actionType.includes('APPROVE') ? '#dcfce7' : r.actionType.includes('REJECT') ? '#fee2e2' : '#e0e7ff',
+                              color: r.actionType.includes('APPROVE') ? '#15803d' : r.actionType.includes('REJECT') ? '#b91c1c' : '#3730a3',
+                            }}>
+                              {r.actionType}
+                            </span>
+                          </td>
+                          <td>{r.targetId ? `#${r.targetId}` : '—'}</td>
+                          <td style={{ maxWidth: '350px', whiteSpace: 'normal', wordBreak: 'break-word', fontSize: '0.85rem' }}>
+                            {r.description}
+                          </td>
+                          <td className="table-cell-date">{formatDate(r.createdAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* TAB 7: MODERATOR APPLICATIONS                                */}
+          {/* ============================================================ */}
+          {activeTab === 'moderator-apps' && (
+            <div className="moderator-apps-tab">
+              <div style={{ marginBottom: '1rem', padding: '12px 16px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '8px', color: '#065f46' }}>
+                <strong>👑 Moderator Applications:</strong> Students who applied for Moderator privileges appear here. Only you (Admin) can approve or reject them.
+              </div>
+
+              {moderatorApplications.length === 0 ? (
+                <Card className="empty-state-card">
+                  <div className="empty-state">
+                    <span className="empty-state__icon">📩</span>
+                    <h3>No moderator applications submitted yet</h3>
+                    <p>When student accounts apply for moderator access, their applications will appear here.</p>
+                  </div>
+                </Card>
+              ) : (
+                <div className="admin-table-container">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>App ID</th>
+                        <th>Applicant</th>
+                        <th>Student ID</th>
+                        <th>Contact &amp; bKash</th>
+                        <th>Active &amp; Honest?</th>
+                        <th>Reason for Applying</th>
+                        <th>Rules Agreed?</th>
+                        <th>Status</th>
+                        <th>Submitted</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {moderatorApplications.map((app) => (
+                        <tr key={app.id}>
+                          <td className="table-cell-bold">#{app.id}</td>
+                          <td>
+                            <strong>{app.userName}</strong>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{app.userEmail}</div>
+                          </td>
+                          <td><span className="student-id-badge">{app.studentId || '—'}</span></td>
+                          <td style={{ fontSize: '0.8rem' }}>
+                            <div><strong>bKash:</strong> {app.bkashNumber || '—'}</div>
+                            <div><strong>Alt Phone:</strong> {app.alternativePhone || '—'}</div>
+                          </td>
+                          <td style={{ fontSize: '0.8rem' }}>
+                            {app.activeHonestCommitment ? (
+                              <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ Yes, actively &amp; honestly</span>
+                            ) : (
+                              <span style={{ color: '#dc2626' }}>No</span>
+                            )}
+                          </td>
+                          <td style={{ maxWidth: '200px', whiteSpace: 'normal', fontSize: '0.85rem' }}>
+                            {app.reason || <span className="text-muted">No reason given</span>}
+                          </td>
+                          <td>
+                            <span style={{
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              background: '#dcfce7',
+                              color: '#15803d'
+                            }}>
+                              ✓ Agreed
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              background: app.status === 'APPROVED' ? '#dcfce7' : app.status === 'REJECTED' ? '#fee2e2' : '#fef3c7',
+                              color: app.status === 'APPROVED' ? '#15803d' : app.status === 'REJECTED' ? '#b91c1c' : '#b45309',
+                            }}>
+                              {app.status}
+                            </span>
+                          </td>
+                          <td className="table-cell-date">{formatDate(app.createdAt)}</td>
+                          <td>
+                            {app.status === 'PENDING' ? (
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  style={{ padding: '3px 8px', fontSize: '0.75rem' }}
+                                  onClick={() => handleReviewModeratorApp(app.id, true)}
+                                >
+                                  ✓ Approve
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  style={{ padding: '3px 8px', fontSize: '0.75rem', borderColor: '#fca5a5', color: '#b91c1c' }}
+                                  onClick={() => handleReviewModeratorApp(app.id, false)}
+                                >
+                                  ✕ Reject
+                                </Button>
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                Reviewed: {app.reviewerNotes || 'Done'}
+                              </span>
+                            )}
                           </td>
                         </tr>
                       ))}

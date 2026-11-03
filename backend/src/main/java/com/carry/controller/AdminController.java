@@ -99,4 +99,43 @@ public class AdminController {
             @AuthenticationPrincipal UserDetailsImpl currentUser) {
         return ResponseEntity.ok(productService.toggleProductActive(id, false, currentUser));
     }
+
+    // Admin Exclusives: Delete Account
+    @DeleteMapping("/users/{id}")
+    public ResponseEntity<Void> deleteUser(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        adminService.deleteUser(id, currentUser);
+        return ResponseEntity.noContent().build();
+    }
+
+    // Admin Exclusives: Moderator Reports
+    @GetMapping("/moderator-reports")
+    public ResponseEntity<List<ModeratorReportDto>> getModeratorReports(
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        return ResponseEntity.ok(adminService.getModeratorReports(currentUser));
+    }
+
+    // Admin Exclusives: Moderator Applications
+    @GetMapping("/moderator-applications")
+    public ResponseEntity<List<RoleApplicationResponseDto>> getModeratorApplications(
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        return ResponseEntity.ok(adminService.getAllModeratorApplications(currentUser));
+    }
+
+    @PutMapping("/moderator-applications/{id}/approve")
+    public ResponseEntity<RoleApplicationResponseDto> approveModeratorApplication(
+            @PathVariable Long id,
+            @RequestParam(required = false) String notes,
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        return ResponseEntity.ok(adminService.reviewModeratorApplication(id, true, notes, currentUser));
+    }
+
+    @PutMapping("/moderator-applications/{id}/reject")
+    public ResponseEntity<RoleApplicationResponseDto> rejectModeratorApplication(
+            @PathVariable Long id,
+            @RequestParam(required = false) String notes,
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        return ResponseEntity.ok(adminService.reviewModeratorApplication(id, false, notes, currentUser));
+    }
 }

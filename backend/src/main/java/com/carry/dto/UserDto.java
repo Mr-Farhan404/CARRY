@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import com.carry.entity.User;
+import com.carry.entity.UserRole;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -21,6 +22,7 @@ public class UserDto {
     private String phone;
     private String department;
     private Boolean isAdmin;
+    private UserRole role;
     private BigDecimal avgRating;
     private LocalDateTime createdAt;
 
@@ -34,6 +36,7 @@ public class UserDto {
                 .phone(user.getPhone())
                 .department(user.getDepartment())
                 .isAdmin(user.getIsAdmin())
+                .role(user.getRole())
                 .avgRating(user.getAvgRating())
                 .createdAt(user.getCreatedAt())
                 .build();

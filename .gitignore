@@ -1,4 +1,8 @@
-# OS Files
+# Android
+android/.gradle/
+android/local.properties
+android/**/build/
+*.apk
 .DS_Store
 Thumbs.db
 

@@ -15,6 +15,7 @@ public interface RatingRepository extends JpaRepository<Rating, Long> {
     List<Rating> findByRatedUserId(Long ratedUserId);
     Optional<Rating> findByRequestId(Long requestId);
     boolean existsByRequestId(Long requestId);
+    void deleteByRatedByIdOrRatedUserId(Long ratedById, Long ratedUserId);
 
     @Query("SELECT AVG(r.score) FROM Rating r WHERE r.ratedUser.id = :ratedUserId")
     Double findAverageScoreByRatedUserId(@Param("ratedUserId") Long ratedUserId);

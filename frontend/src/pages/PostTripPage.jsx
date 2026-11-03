@@ -5,8 +5,9 @@ import { Button, Input, Select, Card } from '../components/common';
 import { metaApi, tripsApi } from '../services/api';
 
 export default function PostTripPage() {
-  const { token } = useAuth();
+  const { token, isAdmin, isDeliveryPartner } = useAuth();
   const navigate = useNavigate();
+  const canPostTrip = isAdmin || isDeliveryPartner;
 
   const [zones, setZones] = useState([]);
   const [isLoadingZones, setIsLoadingZones] = useState(true);
@@ -136,6 +137,12 @@ export default function PostTripPage() {
         subtitle="Let campus peers know you are travelling to Khulna city and can bring items back"
         className="trip-form-card"
       >
+        {!canPostTrip && (
+          <div className="ui-alert ui-alert--warning" style={{ marginBottom: '16px' }} role="alert">
+            🚗 <strong>Delivery Partner Role Required:</strong> Only approved Delivery Partners can post trips and accept delivery orders. Click your profile in the top-right navbar to apply for Delivery Partner access.
+          </div>
+        )}
+
         {globalError && (
           <div className="ui-alert ui-alert--error" role="alert">
             {globalError}
@@ -216,9 +223,10 @@ export default function PostTripPage() {
               type="submit"
               variant="primary"
               size="md"
+              disabled={isSubmitting || !canPostTrip}
               isLoading={isSubmitting}
             >
-              Post Trip & Match Orders
+              {canPostTrip ? 'Post Trip & Match Orders' : 'Partner Access Required'}
             </Button>
           </div>
         </form>

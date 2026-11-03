@@ -16,6 +16,7 @@ import MyTripsPage from './pages/MyTripsPage';
 import AvailableRequestsPage from './pages/AvailableRequestsPage';
 import MyDeliveriesPage from './pages/MyDeliveriesPage';
 import AdminPage from './pages/AdminPage';
+import ModeratorPage from './pages/ModeratorPage';
 import AdminRoute from './components/AdminRoute';
 
 function App() {
@@ -86,6 +87,16 @@ function App() {
             element={
               <ProtectedRoute>
                 <MyDeliveriesPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Protected Moderator Route */}
+          <Route
+            path="moderator"
+            element={
+              <ProtectedRoute>
+                <ModeratorPage />
               </ProtectedRoute>
             }
           />

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#2563EB</color>
+    <color name="primary_dark">#1D4ED8</color>
+    <color name="primary_light">#DBEAFE</color>
+    <color name="accent">#3B82F6</color>
+
+    <color name="bg_app">#F8FAFC</color>
+    <color name="bg_card">#FFFFFF</color>
+    <color name="bg_secondary">#F1F5F9</color>
+
+    <color name="text_main">#0F172A</color>
+    <color name="text_secondary">#475569</color>
+    <color name="text_muted">#64748B</color>
+
+    <color name="border">#E2E8F0</color>
+    <color name="divider">#CBD5E1</color>
+
+    <!-- MFS Payment Brand Colors -->
+    <color name="bkash">#E2136E</color>
+    <color name="bkash_bg">#FDF2F8</color>
+    <color name="nagad">#F97316</color>
+    <color name="nagad_bg">#FFF7ED</color>
+
+    <!-- Status Colors -->
+    <color name="status_green">#16A34A</color>
+    <color name="status_green_bg">#DCFCE7</color>
+    <color name="status_blue">#2563EB</color>
+    <color name="status_blue_bg">#DBEAFE</color>
+    <color name="status_amber">#D97706</color>
+    <color name="status_amber_bg">#FEF3C7</color>
+    <color name="status_red">#DC2626</color>
+    <color name="status_red_bg">#FEE2E2</color>
+
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+</resources>

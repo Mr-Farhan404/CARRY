@@ -32,6 +32,9 @@ public class AuthService {
             throw new ConflictException("Student ID is already registered");
         }
 
+        com.carry.entity.UserRole targetRole = (request.getRole() == com.carry.entity.UserRole.TEACHER) ?
+                com.carry.entity.UserRole.TEACHER : com.carry.entity.UserRole.STUDENT;
+
         User user = User.builder()
                 .fullName(request.getFullName())
                 .studentId(request.getStudentId())
@@ -39,6 +42,8 @@ public class AuthService {
                 .phone(request.getPhone())
                 .department(request.getDepartment())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
+                .role(targetRole)
+                .isAdmin(false)
                 .build();
 
         userRepository.save(user);

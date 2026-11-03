@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface StatusUpdateRepository extends JpaRepository<StatusUpdate, Long> {
     List<StatusUpdate> findByRequestIdOrderByCreatedAtAsc(Long requestId);
+    void deleteByRequestId(Long requestId);
 }

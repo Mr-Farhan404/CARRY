@@ -23,6 +23,7 @@ import com.carry.entity.StatusUpdate;
 import com.carry.entity.Trip;
 import com.carry.entity.TripStatus;
 import com.carry.entity.User;
+import com.carry.entity.UserRole;
 import com.carry.exception.BadRequestException;
 import com.carry.exception.ForbiddenException;
 import com.carry.exception.ResourceNotFoundException;
@@ -381,8 +382,28 @@ public class ProductRequestService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<ProductRequestResponseDto> getAllRequests(RequestStatus status) {
+        List<ProductRequest> requests;
+        if (status != null) {
+            requests = productRequestRepository.findByStatus(status);
+        } else {
+            requests = productRequestRepository.findAll();
+        }
+        return requests.stream()
+                .map(ProductRequestResponseDto::fromEntity)
+                .toList();
+    }
+
     @Transactional
     public ProductRequestResponseDto acceptRequest(Long id, AcceptRequestDto acceptDto, UserDetailsImpl currentUser) {
+        User partnerUser = userRepository.findById(currentUser.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + currentUser.getId()));
+
+        if (partnerUser.getRole() != UserRole.DELIVERY_PARTNER && partnerUser.getRole() != UserRole.ADMIN && !Boolean.TRUE.equals(partnerUser.getIsAdmin())) {
+            throw new ForbiddenException("Only Delivery Partners are authorized to accept delivery orders.");
+        }
+
         ProductRequest existing = productRequestRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Request not found with id: " + id));
 
