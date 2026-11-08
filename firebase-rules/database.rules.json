@@ -1,0 +1,22 @@
+{
+  "rules": {
+    "orderEvents": {
+      "$requestId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['status', 'updatedAt'])"
+      }
+    },
+    "tripLocations": {
+      "$tripId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        ".validate": "newData.val() == null || (newData.hasChildren(['lat', 'lng', 'updatedAt']) && newData.child('lat').isNumber() && newData.child('lng').isNumber())"
+      }
+    },
+    "$other": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}

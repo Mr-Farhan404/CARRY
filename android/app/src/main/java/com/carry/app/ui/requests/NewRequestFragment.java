@@ -278,6 +278,11 @@ public class NewRequestFragment extends Fragment {
                 progressBarManual.setVisibility(View.GONE);
 
                 if (response.isSuccessful()) {
+                    ProductRequest created = response.body();
+                    if (created != null && created.getId() != null) {
+                        String firebaseUid = SessionManager.getInstance(requireContext()).getFirebaseUid();
+                        new com.carry.app.data.firebase.LiveStatusStoreImpl().emitOrderEvent(created.getId(), "REQUESTED", firebaseUid, null);
+                    }
                     Toast.makeText(requireContext(), "Custom request posted successfully!", Toast.LENGTH_LONG).show();
 
                     // Clear fields
@@ -291,7 +296,8 @@ public class NewRequestFragment extends Fragment {
                         ((MainActivity) getActivity()).navigateToTab(R.id.nav_my_requests);
                     }
                 } else {
-                    Toast.makeText(requireContext(), "Failed to post request. Please check inputs.", Toast.LENGTH_LONG).show();
+                    String err = parseRequestError(response);
+                    Toast.makeText(requireContext(), "Failed to post request: " + err, Toast.LENGTH_LONG).show();
                 }
             }
 
@@ -302,5 +308,21 @@ public class NewRequestFragment extends Fragment {
                 Toast.makeText(requireContext(), "Network error: " + t.getMessage(), Toast.LENGTH_LONG).show();
             }
         });
+    }
+
+    private String parseRequestError(Response<?> response) {
+        if (response.code() == 401 || response.code() == 403) {
+            return "Session expired. Please log out and log in again.";
+        }
+        if (response.errorBody() != null) {
+            try {
+                String body = response.errorBody().string();
+                com.google.gson.JsonObject obj = com.google.gson.JsonParser.parseString(body).getAsJsonObject();
+                if (obj.has("message")) {
+                    return obj.get("message").getAsString();
+                }
+            } catch (Exception ignored) {}
+        }
+        return response.message() != null && !response.message().isEmpty() ? response.message() : "Error " + response.code();
     }
 }

@@ -100,49 +100,31 @@ public class RegisterActivity extends AppCompatActivity {
         UserRole selectedRole = (rgAccountType != null && rgAccountType.getCheckedRadioButtonId() == R.id.rbTeacher)
                 ? UserRole.TEACHER : UserRole.STUDENT;
 
-        ApiService api = ApiClient.getService(this);
         RegisterRequest request = new RegisterRequest(name, studentId, email, phone, dept, password, selectedRole);
 
-        api.register(request).enqueue(new Callback<AuthResponse>() {
+        AuthCoordinator coordinator = new AuthCoordinator(
+                ApiClient.getService(this),
+                new com.carry.app.data.firebase.FirebaseAuthGatewayImpl(),
+                sessionManager
+        );
+
+        coordinator.performRegister(request, new AuthCoordinator.AuthResultCallback() {
             @Override
-            public void onResponse(Call<AuthResponse> call, Response<AuthResponse> response) {
-                if (response.isSuccessful() && response.body() != null && response.body().getToken() != null) {
-                    sessionManager.saveToken(response.body().getToken());
-
-                    // Fetch user details
-                    api.getMe().enqueue(new Callback<User>() {
-                        @Override
-                        public void onResponse(Call<User> call, Response<User> res) {
-                            progressBar.setVisibility(View.GONE);
-                            if (res.isSuccessful() && res.body() != null) {
-                                sessionManager.saveUser(res.body());
-                            }
-                            Toast.makeText(RegisterActivity.this, "Account created successfully!", Toast.LENGTH_SHORT).show();
-                            Intent intent = new Intent(RegisterActivity.this, MainActivity.class);
-                            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-                            startActivity(intent);
-                            finish();
-                        }
-
-                        @Override
-                        public void onFailure(Call<User> call, Throwable t) {
-                            progressBar.setVisibility(View.GONE);
-                            startActivity(new Intent(RegisterActivity.this, MainActivity.class));
-                            finish();
-                        }
-                    });
-                } else {
-                    btnRegister.setEnabled(true);
-                    progressBar.setVisibility(View.GONE);
-                    Toast.makeText(RegisterActivity.this, "Registration failed. Email or Student ID may already exist.", Toast.LENGTH_LONG).show();
-                }
+            public void onSuccess(User user, String firebaseUid, String message) {
+                btnRegister.setEnabled(true);
+                progressBar.setVisibility(View.GONE);
+                Toast.makeText(RegisterActivity.this, message, Toast.LENGTH_LONG).show();
+                Intent intent = new Intent(RegisterActivity.this, MainActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+                finish();
             }
 
             @Override
-            public void onFailure(Call<AuthResponse> call, Throwable t) {
+            public void onFailure(String errorMessage) {
                 btnRegister.setEnabled(true);
                 progressBar.setVisibility(View.GONE);
-                Toast.makeText(RegisterActivity.this, "Network error: " + t.getMessage(), Toast.LENGTH_LONG).show();
+                Toast.makeText(RegisterActivity.this, errorMessage, Toast.LENGTH_LONG).show();
             }
         });
     }

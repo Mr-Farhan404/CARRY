@@ -3,6 +3,12 @@ android/.gradle/
 android/local.properties
 android/**/build/
 *.apk
+google-services.json
+*/google-services.json
+**/google-services.json
+!google-services.json.example
+!*/google-services.json.example
+!**/google-services.json.example
 .DS_Store
 Thumbs.db
 
@@ -44,3 +50,6 @@ target/
 hs_err_pid*
 replay_pid*
 .mvn/timing.properties
+
+# Emulator test screenshots
+emulator_screen_*.png

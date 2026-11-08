@@ -101,3 +101,48 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@21
 1. `cd frontend`
 2. `npm install`
 3. `npm run dev`
+
+---
+
+## Android App & Firebase Integration
+
+The native Android app (`com.carry.app`, pure Java, minSdk 24, targetSdk 34) connects to the Spring Boot REST backend (`https://carry-backend-hctl.onrender.com/`) alongside Firebase cloud services:
+
+### 1. Dual-Authentication (Stage 1)
+- Spring Boot provides JWT authorization for backend business operations.
+- Firebase Auth signs in in parallel (`signInOrRegister`) using the student's email and password.
+- Transparent self-healing ensures both newly registered accounts and legacy accounts are automatically provisioned in Firebase Auth.
+
+### 2. Firestore User Profiles & Zero-Cost Photo Storage (Stage 2)
+- Collection `users/{firebaseUid}` stores student profile metadata (`displayName`, `backendUserId`, `department`).
+- Profile avatars use a zero-cost client-side fallback: compressed to <=256px JPEG (<=100KB) and stored directly in the Firestore profile document as Base64, avoiding Blaze billing requirements while maintaining full Cloud Storage compatibility.
+
+### 3. Realtime Database Live Tracking (Stage 3)
+- Realtime Database URL: `https://carry-56e49-default-rtdb.asia-southeast1.firebasedatabase.app` (region: `asia-southeast1`).
+- `orderEvents/{requestId}`: Nudges order status transitions in real time.
+- `tripLocations/{tripId}`: Shares real-time partner coordinates with open-in-Google-Maps navigation intents.
+
+### 4. Firestore Order-Scoped Chat (Stage 4)
+- Path: `chats/{requestId}` and subcollection `chats/{requestId}/messages/{messageId}`.
+- Real-time chat between customer and delivery partner with 50-message history, 500-character validation, rotation state preservation, and graceful offline fallback banner.
+
+### 5. Security Rules (Stage 5)
+- All rule definitions are located in `firebase-rules/`:
+  - `firebase-rules/firestore.rules`: Strict domain validators, immutable fields (`firebaseUid`, `backendUserId`, `requestId`), and sender verification.
+  - `firebase-rules/database.rules.json`: Authenticated access for order events and trip coordinates.
+  - `firebase-rules/storage.rules`: Scoped user storage rules.
+- Deploy rules to Firebase via Firebase CLI:
+```bash
+firebase login
+firebase use carry-56e49
+firebase deploy --only firestore:rules,database
+```
+
+### 6. Building the Android APK
+```bash
+cd android
+./gradlew testDebugUnitTest
+./gradlew assembleDebug
+```
+The compiled output is located at `android/app/build/outputs/apk/debug/app-debug.apk` and copied to `./CARRY-KUET-v1.0.apk`.
+

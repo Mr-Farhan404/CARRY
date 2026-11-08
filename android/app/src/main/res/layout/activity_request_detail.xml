@@ -95,6 +95,46 @@
                     android:textSize="12sp" />
             </LinearLayout>
 
+            <!-- Partner Live Location Banner -->
+            <LinearLayout
+                android:id="@+id/layoutPartnerLocationBanner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_badge_primary"
+                android:orientation="vertical"
+                android:padding="12dp"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/tvPartnerLocationStatus"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="📍 Partner location updated just now"
+                        android:textColor="@color/primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <Button
+                        android:id="@+id/btnOpenInMaps"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:backgroundTint="@color/primary"
+                        android:text="Open in Maps"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp" />
+                </LinearLayout>
+            </LinearLayout>
+
             <Space
                 android:layout_width="match_parent"
                 android:layout_height="14dp" />
@@ -295,6 +335,38 @@
             <Space
                 android:layout_width="match_parent"
                 android:layout_height="16dp" />
+
+            <!-- Open Chat Button (Stage 4) -->
+            <Button
+                android:id="@+id/btnOpenChat"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:backgroundTint="@color/primary"
+                android:text="💬 Open Order Chat"
+                android:textColor="@color/white"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="8dp" />
+
+            <!-- Carrier Progress Order Status Button -->
+            <Button
+                android:id="@+id/btnUpdateDeliveryStatus"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:backgroundTint="@color/status_green"
+                android:text="Advance Delivery Status"
+                android:textColor="@color/white"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="8dp" />
 
             <!-- Cancel Button -->
             <Button

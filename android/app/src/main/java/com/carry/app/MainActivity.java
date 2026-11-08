@@ -278,12 +278,27 @@ public class MainActivity extends AppCompatActivity implements CartManager.CartC
                     progressBarCartCheckout.setVisibility(View.GONE);
 
                     if (response.isSuccessful()) {
+                        String firebaseUid = sessionManager.getFirebaseUid();
+                        if (response.body() != null && !response.body().isEmpty()) {
+                            com.carry.app.data.firebase.LiveStatusStore liveStore = new com.carry.app.data.firebase.LiveStatusStoreImpl();
+                            for (ProductRequest pr : response.body()) {
+                                if (pr.getId() != null) {
+                                    liveStore.emitOrderEvent(pr.getId(), "REQUESTED", firebaseUid, null);
+                                }
+                            }
+                        }
                         cartManager.clear();
                         sheet.dismiss();
                         Toast.makeText(MainActivity.this, "Cart checkout complete! Orders submitted.", Toast.LENGTH_LONG).show();
                         navigateToTab(R.id.nav_my_requests);
                     } else {
-                        Toast.makeText(MainActivity.this, "Checkout failed. Please check inputs.", Toast.LENGTH_LONG).show();
+                        String errMsg = parseCheckoutError(response);
+                        Toast.makeText(MainActivity.this, "Checkout failed: " + errMsg, Toast.LENGTH_LONG).show();
+                        if (response.code() == 401 || response.code() == 403) {
+                            sessionManager.logout();
+                            startActivity(new Intent(MainActivity.this, com.carry.app.ui.auth.LoginActivity.class));
+                            finish();
+                        }
                     }
                 }
 
@@ -297,6 +312,22 @@ public class MainActivity extends AppCompatActivity implements CartManager.CartC
         });
 
         sheet.show();
+    }
+
+    private String parseCheckoutError(Response<?> response) {
+        if (response.code() == 401 || response.code() == 403) {
+            return "Session expired. Please log out and log in again.";
+        }
+        if (response.errorBody() != null) {
+            try {
+                String body = response.errorBody().string();
+                com.google.gson.JsonObject obj = com.google.gson.JsonParser.parseString(body).getAsJsonObject();
+                if (obj.has("message")) {
+                    return obj.get("message").getAsString();
+                }
+            } catch (Exception ignored) {}
+        }
+        return response.message() != null && !response.message().isEmpty() ? response.message() : "Error " + response.code();
     }
 
     private void updateCartSheetUI(View dialogView, CartAdapter adapter) {

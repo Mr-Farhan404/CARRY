@@ -3,6 +3,7 @@ package com.carry.app.ui.shop;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -315,6 +316,15 @@ public class ShopFragment extends Fragment implements ProductAdapter.OnProductAc
                     progressBarCheckout.setVisibility(View.GONE);
 
                     if (response.isSuccessful()) {
+                        String firebaseUid = SessionManager.getInstance(requireContext()).getFirebaseUid();
+                        if (response.body() != null && !response.body().isEmpty()) {
+                            com.carry.app.data.firebase.LiveStatusStore liveStore = new com.carry.app.data.firebase.LiveStatusStoreImpl();
+                            for (ProductRequest pr : response.body()) {
+                                if (pr.getId() != null) {
+                                    liveStore.emitOrderEvent(pr.getId(), "REQUESTED", firebaseUid, null);
+                                }
+                            }
+                        }
                         dialog.dismiss();
                         Toast.makeText(requireContext(), "⚡ Order placed successfully!", Toast.LENGTH_LONG).show();
 
@@ -323,7 +333,15 @@ public class ShopFragment extends Fragment implements ProductAdapter.OnProductAc
                             ((MainActivity) getActivity()).navigateToTab(R.id.nav_my_requests);
                         }
                     } else {
-                        Toast.makeText(requireContext(), "Order checkout failed. Please check details.", Toast.LENGTH_LONG).show();
+                        String err = parseCheckoutError(response);
+                        Toast.makeText(requireContext(), "Order checkout failed: " + err, Toast.LENGTH_LONG).show();
+                        if (response.code() == 401 || response.code() == 403) {
+                            SessionManager.getInstance(requireContext()).logout();
+                            if (getActivity() != null) {
+                                getActivity().startActivity(new Intent(getActivity(), com.carry.app.ui.auth.LoginActivity.class));
+                                getActivity().finish();
+                            }
+                        }
                     }
                 }
 
@@ -337,5 +355,21 @@ public class ShopFragment extends Fragment implements ProductAdapter.OnProductAc
         });
 
         dialog.show();
+    }
+
+    private String parseCheckoutError(Response<?> response) {
+        if (response.code() == 401 || response.code() == 403) {
+            return "Session expired. Please log in again.";
+        }
+        if (response.errorBody() != null) {
+            try {
+                String body = response.errorBody().string();
+                com.google.gson.JsonObject obj = com.google.gson.JsonParser.parseString(body).getAsJsonObject();
+                if (obj.has("message")) {
+                    return obj.get("message").getAsString();
+                }
+            } catch (Exception ignored) {}
+        }
+        return response.message() != null && !response.message().isEmpty() ? response.message() : "Error " + response.code();
     }
 }

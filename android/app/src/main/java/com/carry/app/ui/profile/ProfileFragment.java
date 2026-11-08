@@ -22,13 +22,30 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 
 import com.carry.app.R;
+import com.carry.app.MainActivity;
 import com.carry.app.api.ApiClient;
 import com.carry.app.api.ApiService;
 import com.carry.app.models.*;
 import com.carry.app.ui.auth.LoginActivity;
 import com.carry.app.utils.CartManager;
+import com.carry.app.data.firebase.FirebaseAuthGateway;
+import com.carry.app.data.firebase.FirebaseAuthGatewayImpl;
+import com.carry.app.data.firebase.PhotoStore;
+import com.carry.app.data.firebase.PhotoStoreImpl;
+import com.carry.app.data.firebase.ProfileStore;
+import com.carry.app.data.firebase.ProfileStoreImpl;
+import com.carry.app.utils.ImageResizer;
 import com.carry.app.utils.SessionManager;
 import com.google.android.material.button.MaterialButton;
+import com.bumptech.glide.Glide;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.PickVisualMediaRequest;
+import androidx.activity.result.contract.ActivityResultContracts;
+import android.util.Base64;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.ProgressBar;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -38,6 +55,37 @@ import retrofit2.Callback;
 import retrofit2.Response;
 
 public class ProfileFragment extends Fragment {
+
+    private ImageView ivProfileAvatar;
+    private ProgressBar pbPhotoUpload;
+    private MaterialButton btnChangePhoto;
+    private ImageButton btnEditDisplayName;
+
+    private ProfileViewModel profileViewModel;
+    private final ActivityResultLauncher<PickVisualMediaRequest> pickMediaLauncher =
+            registerForActivityResult(new ActivityResultContracts.PickVisualMedia(), uri -> {
+                if (uri != null && getContext() != null) {
+                    try (java.io.InputStream is = requireContext().getContentResolver().openInputStream(uri)) {
+                        if (is != null) {
+                            byte[] compressed = ImageResizer.processAndCompress(
+                                    is,
+                                    ImageResizer.FALLBACK_MAX_DIMENSION,
+                                    ImageResizer.FALLBACK_MAX_BYTES,
+                                    ImageResizer.DEFAULT_JPEG_QUALITY
+                            );
+                            if (compressed != null && profileViewModel != null) {
+                                profileViewModel.uploadProfilePhoto(compressed);
+                            } else if (getContext() != null) {
+                                Toast.makeText(getContext(), "Failed to compress profile photo.", Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    } catch (Exception e) {
+                        if (getContext() != null) {
+                            Toast.makeText(getContext(), "Unable to read selected photo.", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                }
+            });
 
     private TextView tvProfileName;
     private TextView tvProfileStudentId;
@@ -79,6 +127,24 @@ public class ProfileFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_profile, container, false);
 
         sessionManager = SessionManager.getInstance(requireContext());
+
+        ivProfileAvatar = view.findViewById(R.id.ivProfileAvatar);
+        pbPhotoUpload = view.findViewById(R.id.pbPhotoUpload);
+        btnChangePhoto = view.findViewById(R.id.btnChangePhoto);
+        btnEditDisplayName = view.findViewById(R.id.btnEditDisplayName);
+
+        ProfileStore profileStore = new ProfileStoreImpl();
+        PhotoStore photoStore = new PhotoStoreImpl(profileStore);
+        profileViewModel = new ProfileViewModel(profileStore, photoStore);
+        observeProfileViewModel();
+
+        btnChangePhoto.setOnClickListener(v -> {
+            pickMediaLauncher.launch(new PickVisualMediaRequest.Builder()
+                    .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly.INSTANCE)
+                    .build());
+        });
+
+        btnEditDisplayName.setOnClickListener(v -> showEditDisplayNameDialog());
 
         tvProfileName = view.findViewById(R.id.tvProfileName);
         tvProfileStudentId = view.findViewById(R.id.tvProfileStudentId);
@@ -168,6 +234,17 @@ public class ProfileFragment extends Fragment {
         tvProfileEmail.setText(user.getEmail() != null ? user.getEmail() : "N/A");
         tvProfilePhone.setText(user.getPhone() != null ? user.getPhone() : "N/A");
 
+        String firebaseUid = sessionManager.getFirebaseUid();
+        if (firebaseUid == null) {
+            firebaseUid = new FirebaseAuthGatewayImpl().getCurrentFirebaseUid();
+            if (firebaseUid != null) {
+                sessionManager.saveFirebaseUid(firebaseUid);
+            }
+        }
+        if (firebaseUid != null && profileViewModel != null) {
+            profileViewModel.loadOrSyncProfile(firebaseUid, user);
+        }
+
         UserRole role = user.getRole();
         configureRoleUi(role);
     }
@@ -223,6 +300,30 @@ public class ProfileFragment extends Fragment {
     }
 
     private void showApplyDeliveryPartnerDialog() {
+        User currentUser = sessionManager.getUser();
+        if (currentUser != null && (currentUser.getRole() == UserRole.DELIVERY_PARTNER || currentUser.getRole() == UserRole.ADMIN)) {
+            new AlertDialog.Builder(requireContext())
+                    .setTitle("Already Authorized")
+                    .setMessage("You already have Delivery Partner privileges as " + currentUser.getRole().name() + "!\nYou can go directly to the Deliveries tab to post trips and accept delivery orders.")
+                    .setPositiveButton("Go to Deliveries", (d, w) -> {
+                        if (getActivity() instanceof MainActivity) {
+                            ((MainActivity) getActivity()).navigateToTab(R.id.nav_deliveries);
+                        }
+                    })
+                    .setNegativeButton("Close", null)
+                    .show();
+            return;
+        }
+
+        if (currentUser != null && currentUser.getRole() == UserRole.TEACHER) {
+            new AlertDialog.Builder(requireContext())
+                    .setTitle("Not Eligible")
+                    .setMessage("Teacher accounts are not permitted to apply for Delivery Partner roles.")
+                    .setPositiveButton("OK", null)
+                    .show();
+            return;
+        }
+
         View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_apply_delivery_partner, null);
         EditText etAltPhone = dialogView.findViewById(R.id.etAltPhone);
         EditText etBkashNumber = dialogView.findViewById(R.id.etBkashNumber);
@@ -307,6 +408,9 @@ public class ProfileFragment extends Fragment {
     }
 
     private String parseErrorMessage(Response<?> response) {
+        if (response.code() == 401 || response.code() == 403) {
+            return "Role application is not available on this cloud backend version. To test partner features, please use the admin account (farhan@kuet.ac.bd)!";
+        }
         if (response.errorBody() != null) {
             try {
                 String body = response.errorBody().string();
@@ -320,6 +424,25 @@ public class ProfileFragment extends Fragment {
     }
 
     private void showApplyModeratorDialog() {
+        User currentUser = sessionManager.getUser();
+        if (currentUser != null && (currentUser.getRole() == UserRole.MODERATOR || currentUser.getRole() == UserRole.ADMIN)) {
+            new AlertDialog.Builder(requireContext())
+                    .setTitle("Already Authorized")
+                    .setMessage("You already have Moderator privileges as " + currentUser.getRole().name() + "!")
+                    .setPositiveButton("OK", null)
+                    .show();
+            return;
+        }
+
+        if (currentUser != null && currentUser.getRole() == UserRole.TEACHER) {
+            new AlertDialog.Builder(requireContext())
+                    .setTitle("Not Eligible")
+                    .setMessage("Teacher accounts are not permitted to apply for Moderator roles.")
+                    .setPositiveButton("OK", null)
+                    .show();
+            return;
+        }
+
         View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_apply_moderator, null);
         EditText etAltPhone = dialogView.findViewById(R.id.etModAltPhone);
         EditText etBkashNumber = dialogView.findViewById(R.id.etModBkashNumber);
@@ -1041,6 +1164,7 @@ public class ProfileFragment extends Fragment {
                 .setTitle("Log Out")
                 .setMessage("Are you sure you want to log out of your CARRY account?")
                 .setPositiveButton("Log Out", (dialog, which) -> {
+                    new com.carry.app.data.firebase.FirebaseAuthGatewayImpl().signOut();
                     sessionManager.logout();
                     CartManager.getInstance().clear();
                     ApiClient.reset();
@@ -1054,5 +1178,74 @@ public class ProfileFragment extends Fragment {
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
+    }
+
+    private void observeProfileViewModel() {
+        if (profileViewModel == null) return;
+        profileViewModel.setStateListener(state -> {
+            if (!isAdded() || getActivity() == null) return;
+            getActivity().runOnUiThread(() -> {
+                if (state.profile != null) {
+                    if (state.profile.getDisplayName() != null && !state.profile.getDisplayName().trim().isEmpty()) {
+                        tvProfileName.setText(state.profile.getDisplayName());
+                    }
+                    if (state.profile.getPhotoBase64() != null && !state.profile.getPhotoBase64().isEmpty()) {
+                        try {
+                            byte[] decoded = Base64.decode(state.profile.getPhotoBase64(), Base64.DEFAULT);
+                            Glide.with(ProfileFragment.this)
+                                    .load(decoded)
+                                    .circleCrop()
+                                    .placeholder(R.drawable.ic_person)
+                                    .into(ivProfileAvatar);
+                        } catch (Exception ignored) {}
+                    }
+                }
+
+                if (state.isUploadingPhoto) {
+                    pbPhotoUpload.setVisibility(View.VISIBLE);
+                    btnChangePhoto.setEnabled(false);
+                } else {
+                    pbPhotoUpload.setVisibility(View.GONE);
+                    btnChangePhoto.setEnabled(true);
+                }
+
+                if (state.statusMessage != null) {
+                    Toast.makeText(requireContext(), state.statusMessage, Toast.LENGTH_SHORT).show();
+                    state.statusMessage = null;
+                }
+                if (state.errorMessage != null) {
+                    Toast.makeText(requireContext(), state.errorMessage, Toast.LENGTH_SHORT).show();
+                    state.errorMessage = null;
+                }
+            });
+        });
+    }
+
+    private void showEditDisplayNameDialog() {
+        if (getContext() == null || profileViewModel == null) return;
+        EditText etName = new EditText(requireContext());
+        etName.setText(tvProfileName.getText());
+        etName.setSelection(etName.getText().length());
+        etName.setHint("Enter display name");
+
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Edit Display Name")
+                .setView(etName)
+                .setPositiveButton("Save", (dialog, which) -> {
+                    String newName = etName.getText().toString().trim();
+                    if (!newName.isEmpty()) {
+                        profileViewModel.updateDisplayName(newName);
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        if (profileViewModel != null) {
+            profileViewModel.removeStateListener();
+        }
     }
 }

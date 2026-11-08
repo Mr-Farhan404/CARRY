@@ -131,6 +131,77 @@
                             android:textSize="11sp"
                             android:textStyle="bold" />
                     </LinearLayout>
+
+                    <!-- Location Sharing Section -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_badge_primary"
+                        android:orientation="vertical"
+                        android:padding="10dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📍 Live Location Sharing"
+                            android:textColor="@color/primary"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvLocationSharingNote"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Share your location so waiting customers can track your arrival."
+                            android:textColor="@color/text_secondary"
+                            android:textSize="11sp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:orientation="horizontal">
+
+                            <Button
+                                android:id="@+id/btnShareLocationNow"
+                                android:layout_width="0dp"
+                                android:layout_height="38dp"
+                                android:layout_weight="1"
+                                android:backgroundTint="@color/primary"
+                                android:text="Share my location now"
+                                android:textColor="@color/white"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+
+                            <Space
+                                android:id="@+id/spaceStopSharing"
+                                android:layout_width="8dp"
+                                android:layout_height="wrap_content"
+                                android:visibility="gone" />
+
+                            <Button
+                                android:id="@+id/btnStopSharingLocation"
+                                android:layout_width="wrap_content"
+                                android:layout_height="38dp"
+                                android:backgroundTint="@color/status_red_bg"
+                                android:text="Stop sharing"
+                                android:textColor="@color/status_red"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tvLocationShareStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Status: Not shared"
+                            android:textColor="@color/text_muted"
+                            android:textSize="11sp" />
+                    </LinearLayout>
                 </LinearLayout>
 
                 <!-- If No Active Trip -->
@@ -170,6 +241,49 @@
                         android:textStyle="bold" />
                 </LinearLayout>
 
+            </LinearLayout>
+
+            <!-- Assigned / Accepted Deliveries Section -->
+            <LinearLayout
+                android:id="@+id/layoutAssignedSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:text="📦 Orders You Are Delivering"
+                    android:textColor="@color/text_main"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:layout_marginTop="2dp"
+                    android:text="Tap an order to track or advance delivery status"
+                    android:textColor="@color/text_muted"
+                    android:textSize="12sp" />
+
+                <Space
+                    android:layout_width="match_parent"
+                    android:layout_height="8dp" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvAssignedRequests"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:nestedScrollingEnabled="false" />
+
+                <Space
+                    android:layout_width="match_parent"
+                    android:layout_height="16dp" />
             </LinearLayout>
 
             <TextView

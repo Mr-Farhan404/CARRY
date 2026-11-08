@@ -80,53 +80,27 @@ public class LoginActivity extends AppCompatActivity {
         btnLogin.setEnabled(false);
         progressBar.setVisibility(View.VISIBLE);
 
-        ApiService api = ApiClient.getService(this);
-        LoginRequest request = new LoginRequest(email, password);
+        AuthCoordinator coordinator = new AuthCoordinator(
+                ApiClient.getService(this),
+                new com.carry.app.data.firebase.FirebaseAuthGatewayImpl(),
+                sessionManager
+        );
 
-        api.login(request).enqueue(new Callback<AuthResponse>() {
+        coordinator.performLogin(email, password, new AuthCoordinator.AuthResultCallback() {
             @Override
-            public void onResponse(Call<AuthResponse> call, Response<AuthResponse> response) {
-                if (response.isSuccessful() && response.body() != null && response.body().getToken() != null) {
-                    String token = response.body().getToken();
-                    sessionManager.saveToken(token);
-
-                    // Fetch user details
-                    fetchUserDetails();
-                } else {
-                    btnLogin.setEnabled(true);
-                    progressBar.setVisibility(View.GONE);
-                    Toast.makeText(LoginActivity.this, "Invalid credentials. Please try again.", Toast.LENGTH_LONG).show();
-                }
-            }
-
-            @Override
-            public void onFailure(Call<AuthResponse> call, Throwable t) {
+            public void onSuccess(User user, String firebaseUid, String message) {
                 btnLogin.setEnabled(true);
                 progressBar.setVisibility(View.GONE);
-                Toast.makeText(LoginActivity.this, "Network error: " + t.getMessage(), Toast.LENGTH_LONG).show();
-            }
-        });
-    }
-
-    private void fetchUserDetails() {
-        ApiService api = ApiClient.getService(this);
-        api.getMe().enqueue(new Callback<User>() {
-            @Override
-            public void onResponse(Call<User> call, Response<User> response) {
-                progressBar.setVisibility(View.GONE);
-                if (response.isSuccessful() && response.body() != null) {
-                    sessionManager.saveUser(response.body());
-                }
-                Toast.makeText(LoginActivity.this, "Welcome to CARRY!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(LoginActivity.this, message, Toast.LENGTH_SHORT).show();
                 startActivity(new Intent(LoginActivity.this, MainActivity.class));
                 finish();
             }
 
             @Override
-            public void onFailure(Call<User> call, Throwable t) {
+            public void onFailure(String errorMessage) {
+                btnLogin.setEnabled(true);
                 progressBar.setVisibility(View.GONE);
-                startActivity(new Intent(LoginActivity.this, MainActivity.class));
-                finish();
+                Toast.makeText(LoginActivity.this, errorMessage, Toast.LENGTH_LONG).show();
             }
         });
     }

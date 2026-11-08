@@ -41,7 +41,12 @@ public class ApiClient {
                     builder.header("Authorization", "Bearer " + token);
                 }
 
-                return chain.proceed(builder.build());
+                Response response = chain.proceed(builder.build());
+                if (response.code() == 401 || (response.code() == 403 && (session.isTokenExpired() || original.url().encodedPath().contains("/api/users/")))) {
+                    session.logout();
+                    new com.carry.app.data.firebase.FirebaseAuthGatewayImpl().signOut();
+                }
+                return response;
             };
 
             OkHttpClient client = new OkHttpClient.Builder()

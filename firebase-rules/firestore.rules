@@ -1,0 +1,206 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // This security rules file assumes the following data structures:
+    //
+    // Collection: users/{firebaseUid}
+    // Document ID: Firebase UID (`request.auth.uid`)
+    // Fields:
+    //   - firebaseUid: string (required, immutable, 1-128 chars) - matches auth.uid
+    //   - displayName: string (required, 1-100 chars) - user's full name
+    //   - backendUserId: int/number (required, immutable, positive) - backend database user ID
+    //   - department: string (optional, 0-100 chars) - academic department
+    //   - photoUrl: string (optional, 0-1000 chars, valid URL) - Firebase Storage or external photo URL
+    //   - photoBase64: string (optional, 0-150000 chars) - base64 profile image string
+    //   - updatedAt: timestamp (optional/required) - server timestamp of last update
+    //
+    // Collection: chats/{requestId}
+    // Document ID: Order / Request ID string (e.g. "123")
+    // Fields:
+    //   - requestId: string (optional, immutable, 1-50 chars) - matches document ID
+    //   - orderTitle: string (optional, 0-200 chars) - summary title of the order
+    //   - participantUids: list (optional, max 10 strings) - UIDs of order customer & delivery partner
+    //   - lastMessage: string (optional, 0-500 chars) - preview of most recent chat message
+    //   - lastMessageTime: timestamp (optional) - timestamp when last message was dispatched
+    //   - updatedAt: timestamp (optional) - timestamp when chat was initialized or updated
+    //
+    // Subcollection: chats/{requestId}/messages/{messageId}
+    // Document ID: Unique message ID string
+    // Fields:
+    //   - id: string (required, immutable, 1-50 chars) - matches messageId
+    //   - senderUid: string (required, immutable, 1-128 chars) - author's auth.uid
+    //   - senderName: string (required, 1-100 chars) - author's display name
+    //   - text: string (required, 1-500 chars) - message content
+    //   - createdAt: timestamp (required, immutable) - server timestamp of message dispatch
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    // Check if the request is from an authenticated user
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the user is the owner of the document based on UID
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Ensure the document contains only the specified allowed fields
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Ensure the document contains all required fields
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // Validate optional string field: if present and non-null, must be string within bounds
+    function isValidOptionalString(data, field, minLen, maxLen) {
+      return !(field in data) ||
+             data[field] == null ||
+             (data[field] is string &&
+              data[field].size() >= minLen &&
+              data[field].size() <= maxLen);
+    }
+
+    // Validate URL format (must be empty or start with http:// or https://)
+    function isValidUrl(url) {
+      return url is string &&
+             (url == "" || url.matches("^https?://.*"));
+    }
+
+    // Verify that specified immutable fields have not been modified during an update
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    // Validate user profile schema and constraints
+    function isValidUser(data, uid) {
+      return hasOnlyAllowedFields(['firebaseUid', 'displayName', 'backendUserId', 'department', 'photoUrl', 'photoBase64', 'updatedAt']) &&
+             hasRequiredFields(['firebaseUid', 'displayName', 'backendUserId']) &&
+             data.firebaseUid is string &&
+             data.firebaseUid == uid &&
+             data.firebaseUid.size() > 0 &&
+             data.firebaseUid.size() <= 128 &&
+             data.displayName is string &&
+             data.displayName.size() > 0 &&
+             data.displayName.size() <= 100 &&
+             (data.backendUserId is int || data.backendUserId is number) &&
+             data.backendUserId > 0 &&
+             isValidOptionalString(data, 'department', 0, 100) &&
+             (!('photoUrl' in data) || data.photoUrl == null || (isValidUrl(data.photoUrl) && data.photoUrl.size() <= 1000)) &&
+             isValidOptionalString(data, 'photoBase64', 0, 150000) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    // Validate chat metadata schema and constraints
+    function isValidChat(data, reqId) {
+      return hasOnlyAllowedFields(['requestId', 'orderTitle', 'participantUids', 'lastMessage', 'lastMessageTime', 'updatedAt']) &&
+             (!('requestId' in data) || (data.requestId is string && data.requestId == reqId && data.requestId.size() > 0 && data.requestId.size() <= 50)) &&
+             isValidOptionalString(data, 'orderTitle', 0, 200) &&
+             (!('participantUids' in data) || (data.participantUids is list && data.participantUids.size() <= 10)) &&
+             isValidOptionalString(data, 'lastMessage', 0, 500) &&
+             (!('lastMessageTime' in data) || data.lastMessageTime is timestamp) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    // Validate chat message schema and constraints
+    function isValidMessage(data, msgId) {
+      return hasOnlyAllowedFields(['id', 'senderUid', 'senderName', 'text', 'createdAt']) &&
+             hasRequiredFields(['id', 'senderUid', 'senderName', 'text', 'createdAt']) &&
+             data.id is string &&
+             data.id == msgId &&
+             data.id.size() > 0 &&
+             data.id.size() <= 50 &&
+             data.senderUid is string &&
+             data.senderUid == request.auth.uid &&
+             data.senderUid.size() <= 128 &&
+             data.senderName is string &&
+             data.senderName.size() > 0 &&
+             data.senderName.size() <= 100 &&
+             data.text is string &&
+             data.text.size() > 0 &&
+             data.text.size() <= 500 &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Collection Match Rules
+    // ===============================================================
+
+    // Root default deny: block any unmatched paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User Profiles
+    match /users/{firebaseUid} {
+      // Allow authenticated users to view profiles (required for resolving participant UIDs
+      // by backendUserId and displaying delivery partner / customer info in chats & orders)
+      allow read: if isAuthenticated();
+
+      // Only the profile owner can create their own profile document
+      allow create: if isAuthenticated() &&
+                       isOwner(firebaseUid) &&
+                       request.resource.data.firebaseUid == request.auth.uid &&
+                       isValidUser(request.resource.data, firebaseUid);
+
+      // Only the profile owner can update their profile; immutable fields are strictly protected
+      allow update: if isAuthenticated() &&
+                       isOwner(firebaseUid) &&
+                       request.resource.data.firebaseUid == request.auth.uid &&
+                       isValidUser(request.resource.data, firebaseUid) &&
+                       areImmutableFieldsUnchanged(['firebaseUid', 'backendUserId']);
+
+      // Disallow deletion to preserve reference integrity across chats and orders
+      allow delete: if false;
+    }
+
+    // Chats
+    match /chats/{requestId} {
+      // Allow reading if authenticated and user is one of the participants, or if participant list is not yet populated
+      allow read: if isAuthenticated() &&
+                     (!('participantUids' in resource.data) || request.auth.uid in resource.data.participantUids);
+
+      // Allow authenticated users involved in order to create chat document
+      allow create: if isAuthenticated() &&
+                       isValidChat(request.resource.data, requestId);
+
+      // Allow authenticated users to update chat metadata (e.g. lastMessage, participant union);
+      // ensures requestId cannot be tampered with
+      allow update: if isAuthenticated() &&
+                       isValidChat(request.resource.data, requestId) &&
+                       (!('requestId' in resource.data) || !('requestId' in request.resource.data) || request.resource.data.requestId == resource.data.requestId);
+
+      // Disallow deletion of chat threads
+      allow delete: if false;
+
+      // Chat Messages Subcollection
+      match /messages/{messageId} {
+        // Authenticated users can read messages for the chat thread
+        allow read: if isAuthenticated();
+
+        // Authenticated sender can create a new message with valid text, sender identity, and timestamp
+        allow create: if isAuthenticated() &&
+                         isValidMessage(request.resource.data, messageId);
+
+        // Messages are strictly immutable and cannot be modified or deleted
+        allow update, delete: if false;
+      }
+    }
+  }
+}
